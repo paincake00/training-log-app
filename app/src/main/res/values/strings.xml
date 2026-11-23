@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Тренировки</string>
+
+    <string name="log_title">Тренировки</string>
+    <string name="plan_title">Недельный план</string>
+
+    <string name="tab_log">Лог</string>
+    <string name="tab_plan">План</string>
+
+    <string name="log_placeholder">Здесь появится лог тренировок</string>
+
+    <string name="plan_day_rest">Отдых</string>
+    <string name="plan_today_header">Сегодня · %1$s</string>
+    <string name="plan_add">Добавить</string>
+    <string name="plan_exercise_actions">Действия с упражнением</string>
+    <string name="plan_action_edit_identity">Изменить название и описание</string>
+    <string name="plan_action_edit_progress">Изменить прогрессию</string>
+    <string name="plan_action_move_up">Переместить выше</string>
+    <string name="plan_action_move_down">Переместить ниже</string>
+    <string name="plan_action_delete">Удалить из дня</string>
+
+    <string name="plan_message_duplicate">Упражнение уже добавлено</string>
+    <string name="plan_message_not_found">Упражнение не найдено</string>
+    <string name="plan_message_save_failed">Не удалось сохранить изменения</string>
+
+    <plurals name="plan_exercise_count">
+        <item quantity="one">%1$d упражнение</item>
+        <item quantity="few">%1$d упражнения</item>
+        <item quantity="many">%1$d упражнений</item>
+        <item quantity="other">%1$d упражнения</item>
+    </plurals>
+
+    <string-array name="weekdays">
+        <item>понедельник</item>
+        <item>вторник</item>
+        <item>среда</item>
+        <item>четверг</item>
+        <item>пятница</item>
+        <item>суббота</item>
+        <item>воскресенье</item>
+    </string-array>
+
+    <string name="picker_title">Добавить упражнение</string>
+    <string name="picker_search_placeholder">Поиск упражнения</string>
+    <string name="picker_search_clear">Очистить поиск</string>
+    <string name="picker_empty">Ничего не найдено</string>
+    <string name="picker_create_new">Создать новое упражнение</string>
+
+    <string name="dialog_create_title">Новое упражнение</string>
+    <string name="dialog_identity_title">Название и описание</string>
+    <string name="dialog_progress_title">Плановая прогрессия</string>
+    <string name="dialog_name_label">Название</string>
+    <string name="dialog_description_label">Описание</string>
+    <string name="dialog_progress_label">Прогрессия</string>
+    <string name="dialog_name_required">Введите название</string>
+    <string name="dialog_identity_warning">Название и описание общие для всех тренировок. Изменения применятся везде.</string>
+    <string name="dialog_cancel">Отмена</string>
+    <string name="dialog_save">Сохранить</string>
+    <string name="dialog_add">Добавить</string>
+    <string name="dialog_delete_confirm_title">Удалить упражнение?</string>
+    <string name="dialog_delete_confirm_text">Упражнение будет удалено только из этого дня плана.</string>
+    <string name="dialog_delete">Удалить</string>
+</resources>

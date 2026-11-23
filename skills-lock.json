@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "skills": {
+    "edge-to-edge": {
+      "source": "android/skills",
+      "commit": "7f7b21730a605d112ca9f79b6e40105ce7b670ee",
+      "sourceType": "github",
+      "skillPath": "system/edge-to-edge/SKILL.md",
+      "computedHash": "954c391ab845f97ce160c04c3944d6c6da3c7ad0385970353b314ee2a3aabea2"
+    },
+    "testing-setup": {
+      "source": "android/skills",
+      "commit": "7f7b21730a605d112ca9f79b6e40105ce7b670ee",
+      "sourceType": "github",
+      "skillPath": "testing/testing-setup/SKILL.md",
+      "computedHash": "26b14d5f03fe974fbc6d00c6965af531d4c65ce72c91a66ec6146d71fec425a7"
+    }
+  }
+}
