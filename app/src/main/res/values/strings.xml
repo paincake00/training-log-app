@@ -8,7 +8,14 @@
     <string name="tab_log">Лог</string>
     <string name="tab_plan">План</string>
 
-    <string name="log_placeholder">Здесь появится лог тренировок</string>
+    <string name="log_workout_start">Начать тренировку</string>
+    <string name="log_workout_continue">Продолжить тренировку</string>
+    <string name="log_workout_open">Открыть тренировку</string>
+    <string name="log_today_header">Сегодня · %1$s</string>
+    <string name="log_draft">Черновик</string>
+    <string name="log_no_exercises">Упражнения не добавлены</string>
+    <string name="log_empty_title">Пока нет тренировок</string>
+    <string name="log_message_save_failed">Не удалось сохранить изменения</string>
 
     <string name="plan_day_rest">Отдых</string>
     <string name="plan_today_header">Сегодня · %1$s</string>

@@ -89,7 +89,11 @@ fun AppNavHost() {
             },
         ) {
             composable(AppTab.LOG.route) {
-                LogScreen()
+                LogScreen(
+                    onOpenWorkout = { workoutId ->
+                        navController.navigate(Routes.workout(workoutId))
+                    },
+                )
             }
             composable(AppTab.PLAN.route) {
                 PlanScreen(
