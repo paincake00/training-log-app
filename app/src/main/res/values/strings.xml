@@ -11,7 +11,6 @@
     <string name="log_workout_start">Начать тренировку</string>
     <string name="log_workout_continue">Продолжить тренировку</string>
     <string name="log_workout_open">Открыть тренировку</string>
-    <string name="log_today_header">Сегодня · %1$s</string>
     <string name="log_draft">Черновик</string>
     <string name="log_no_exercises">Упражнения не добавлены</string>
     <string name="log_empty_title">Пока нет тренировок</string>
@@ -86,7 +85,7 @@
     <string name="workout_action_delete_exercise">Удалить из тренировки</string>
     <string name="workout_plan_label">По плану:</string>
     <string name="workout_progress_label">Факт</string>
-    <string name="workout_reload">Обновить прогрессию в плане</string>
+    <string name="workout_sync_to_plan">В план</string>
     <string name="workout_add_exercise">Добавить упражнение</string>
     <string name="workout_finish">Завершить тренировку</string>
     <string name="workout_completed">Тренировка завершена</string>
@@ -99,7 +98,6 @@
     <string name="workout_message_save_failed">Не удалось сохранить изменения</string>
     <string name="workout_message_synced_plan_and_preset">Прогрессия обновлена в плане и пресете</string>
     <string name="workout_message_synced_preset_only">В плане на этот день упражнения нет. Обновлена только последняя прогрессия</string>
-    <string name="workout_message_not_in_progress">Тренировка уже завершена</string>
 
     <string name="workout_delete_exercise_title">Удалить упражнение?</string>
     <string name="workout_delete_exercise_text">Упражнение «%1$s» будет удалено только из этой тренировки.</string>

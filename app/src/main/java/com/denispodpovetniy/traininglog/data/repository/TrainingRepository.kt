@@ -133,6 +133,8 @@ class TrainingRepository(private val db: AppDatabase) {
     /**
      * Ручная синхронизация фактической прогрессии в план дня недели тренировки
      * и в `lastProgress` пресета. Другие дни и тренировки не затрагиваются.
+     *
+     * Доступна для тренировки в любом статусе: и `IN_PROGRESS`, и `COMPLETED`.
      */
     suspend fun syncProgressToPlan(
         workoutId: Long,
@@ -141,9 +143,6 @@ class TrainingRepository(private val db: AppDatabase) {
     ): SyncResult = db.withTransaction {
         val workout = workoutDao.getById(workoutId)
             ?: return@withTransaction SyncResult.NotFound
-        if (workout.status != WorkoutStatus.IN_PROGRESS) {
-            return@withTransaction SyncResult.WorkoutNotInProgress
-        }
 
         val row = workoutDao.getExerciseById(workoutExerciseId)
             ?: return@withTransaction SyncResult.NotFound

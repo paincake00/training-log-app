@@ -65,7 +65,6 @@ enum class WorkoutMessage {
     SaveFailed,
     SyncedPlanAndPreset,
     SyncedPresetOnly,
-    NotInProgress,
 }
 
 /** Одноразовое событие выхода с экрана тренировки. */
@@ -131,8 +130,12 @@ fun buildWorkoutUiState(
 }
 
 /**
+ * Синхронизация фактической прогрессии в план доступна, когда есть что переносить.
+ */
+fun canSyncProgressToPlan(progress: String): Boolean = progress.isNotBlank()
+
+/**
  * Возвращает новый порядок строк тренировки после сдвига [rowId] на [delta].
- *
  * `null` — если строка не найдена или сдвиг выходит за границы списка.
  */
 fun reorderedWorkoutIds(

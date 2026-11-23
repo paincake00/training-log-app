@@ -245,7 +245,6 @@ fun WorkoutContent(
                             row = row,
                             isFirst = index == 0,
                             isLast = index == state.exercises.lastIndex,
-                            canReload = state.status == WorkoutStatus.IN_PROGRESS,
                             onProgressChange = { text -> onProgressChange(row.rowId, text) },
                             onReload = { onReload(row) },
                             onEditIdentity = { onOpenEditIdentity(row) },
@@ -446,7 +445,6 @@ private fun WorkoutExerciseCard(
     row: WorkoutExerciseUi,
     isFirst: Boolean,
     isLast: Boolean,
-    canReload: Boolean,
     onProgressChange: (String) -> Unit,
     onReload: () -> Unit,
     onEditIdentity: () -> Unit,
@@ -532,17 +530,19 @@ private fun WorkoutExerciseCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                 )
 
-                if (canReload) {
-                    Spacer(Modifier.width(4.dp))
-                    IconButton(
-                        onClick = onReload,
-                        modifier = Modifier.size(48.dp),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_refresh),
-                            contentDescription = stringResource(R.string.workout_reload),
-                        )
-                    }
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    onClick = onReload,
+                    enabled = canSyncProgressToPlan(row.progress),
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_refresh),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.workout_sync_to_plan))
                 }
             }
         }
@@ -772,5 +772,4 @@ internal val WorkoutMessage.textRes: Int
         WorkoutMessage.SaveFailed -> R.string.workout_message_save_failed
         WorkoutMessage.SyncedPlanAndPreset -> R.string.workout_message_synced_plan_and_preset
         WorkoutMessage.SyncedPresetOnly -> R.string.workout_message_synced_preset_only
-        WorkoutMessage.NotInProgress -> R.string.workout_message_not_in_progress
     }

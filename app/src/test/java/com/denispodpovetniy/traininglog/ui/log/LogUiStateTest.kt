@@ -6,6 +6,7 @@ import com.denispodpovetniy.traininglog.data.entity.WorkoutExerciseEntity
 import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
 import com.denispodpovetniy.traininglog.data.relation.WorkoutExerciseWithExercise
 import com.denispodpovetniy.traininglog.data.relation.WorkoutWithExercises
+import com.denispodpovetniy.traininglog.util.DateFormatters
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -29,6 +30,27 @@ class LogUiStateTest {
         assertEquals(listOf(TUESDAY, MONDAY, SUNDAY), state.workouts.map { it.date })
         assertEquals(listOf(true, false, false), state.workouts.map { it.isToday })
         assertFalse(state.loading)
+    }
+
+    @Test
+    fun `cards are newest first and map every date including today to exact header`() {
+        val rows = listOf(
+            workoutRow(workoutId = 3, date = TUESDAY),
+            workoutRow(workoutId = 2, date = MONDAY),
+            workoutRow(workoutId = 1, date = SUNDAY),
+        )
+
+        val state = buildLogUiState(rows, today = TUESDAY)
+
+        assertEquals(listOf(3L, 2L, 1L), state.workouts.map { it.workoutId })
+        assertEquals(
+            listOf(
+                "24.11.2026 · вторник",
+                "23.11.2026 · понедельник",
+                "22.11.2026 · воскресенье",
+            ),
+            state.workouts.map { DateFormatters.formatDate(it.date) },
+        )
     }
 
     @Test

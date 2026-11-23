@@ -252,16 +252,14 @@ class WorkoutViewModel(
 
     /**
      * Синхронизирует фактическую прогрессию строки в план дня недели тренировки
-     * и в `lastProgress` пресета. Доступно только для `IN_PROGRESS`.
+     * и в `lastProgress` пресета. Доступно для тренировки в любом статусе.
      */
     fun reload(row: WorkoutExerciseUi) {
-        if (uiState.value.status != WorkoutStatus.IN_PROGRESS) return
         launchMutation {
             flushProgress()
             when (repository.syncProgressToPlan(workoutId, row.rowId, now = now())) {
                 SyncResult.UpdatedPlanAndPreset -> message.value = WorkoutMessage.SyncedPlanAndPreset
                 SyncResult.UpdatedPresetOnly -> message.value = WorkoutMessage.SyncedPresetOnly
-                SyncResult.WorkoutNotInProgress -> message.value = WorkoutMessage.NotInProgress
                 SyncResult.NotFound -> message.value = WorkoutMessage.ExerciseNotFound
             }
         }

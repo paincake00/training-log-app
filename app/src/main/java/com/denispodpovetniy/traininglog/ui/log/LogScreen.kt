@@ -36,7 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -83,7 +82,6 @@ fun LogContent(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarScope = rememberCoroutineScope()
-    val weekdays = stringArrayResource(R.array.weekdays)
     val messageText = state.message?.let { stringResource(it.textRes) }
 
     LaunchedEffect(state.message) {
@@ -127,7 +125,6 @@ fun LogContent(
                     items(state.workouts, key = { it.workoutId }) { workout ->
                         WorkoutCard(
                             workout = workout,
-                            weekdays = weekdays,
                             onClick = { onOpenWorkout(workout.workoutId) },
                         )
                     }
@@ -182,7 +179,6 @@ private fun TodayWorkoutCta(
 @Composable
 private fun WorkoutCard(
     workout: WorkoutLogUi,
-    weekdays: Array<String>,
     onClick: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -198,7 +194,7 @@ private fun WorkoutCard(
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = workoutHeader(workout, weekdays),
+                    text = DateFormatters.formatDate(workout.date),
                     style = MaterialTheme.typography.titleSmall,
                     color = colors.onSurface,
                     maxLines = 2,
@@ -314,17 +310,6 @@ private fun LogEmptyState() {
         )
     }
 }
-
-@Composable
-private fun workoutHeader(workout: WorkoutLogUi, weekdays: Array<String>): String =
-    if (workout.isToday) {
-        stringResource(
-            R.string.log_today_header,
-            weekdays.getOrElse(workout.date.dayOfWeek.value - 1) { "" },
-        )
-    } else {
-        DateFormatters.formatDate(workout.date)
-    }
 
 @get:StringRes
 private val LogMessage.textRes: Int

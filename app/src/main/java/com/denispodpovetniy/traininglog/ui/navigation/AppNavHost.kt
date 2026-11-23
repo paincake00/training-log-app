@@ -1,6 +1,8 @@
 package com.denispodpovetniy.traininglog.ui.navigation
 
 import androidx.annotation.StringRes
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
@@ -88,14 +90,26 @@ fun AppNavHost() {
                     .consumeWindowInsets(innerPadding)
             },
         ) {
-            composable(AppTab.LOG.route) {
+            composable(
+                route = AppTab.LOG.route,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
                 LogScreen(
                     onOpenWorkout = { workoutId ->
                         navController.navigate(Routes.workout(workoutId))
                     },
                 )
             }
-            composable(AppTab.PLAN.route) {
+            composable(
+                route = AppTab.PLAN.route,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
                 PlanScreen(
                     onOpenWorkout = { workoutId ->
                         navController.navigate(Routes.workout(workoutId))
@@ -107,6 +121,10 @@ fun AppNavHost() {
                 arguments = listOf(
                     navArgument(Routes.WORKOUT_ID_ARG) { type = NavType.LongType },
                 ),
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
             ) { entry ->
                 WorkoutScreen(
                     workoutId = entry.arguments?.getLong(Routes.WORKOUT_ID_ARG) ?: 0L,

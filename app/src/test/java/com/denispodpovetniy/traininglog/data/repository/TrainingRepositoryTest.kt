@@ -658,9 +658,10 @@ class TrainingRepositoryTest {
     }
 
     @Test
-    fun `syncProgressToPlan returns WorkoutNotInProgress for completed workout and changes nothing`() = runTest {
+    fun `syncProgressToPlan works for completed workout and updates plan and preset`() = runTest {
         val exercise = insertExercise("Присед", lastProgress = "исходный пресет")
-        val planRowId = addPlanRow(weekday = 1, exerciseId = exercise, position = 0, progress = "план")
+        val mondayPlanId = addPlanRow(weekday = 1, exerciseId = exercise, position = 0, progress = "план")
+        val tuesdayPlanId = addPlanRow(weekday = 2, exerciseId = exercise, position = 0, progress = "вт-план")
         val workoutId = repository.createWorkoutForDate(MONDAY, now = T0)
         val workoutRow = workoutRows(workoutId).single()
         repository.updateWorkoutExerciseProgress(workoutRow.id, "факт", now = T1)
@@ -668,21 +669,16 @@ class TrainingRepositoryTest {
 
         val result = repository.syncProgressToPlan(workoutId, workoutRow.id, now = T2)
 
-        assertEquals(SyncResult.WorkoutNotInProgress, result)
-        assertEquals("план", db.planDao().getById(planRowId)!!.progress)
-        assertEquals(T0, db.planDao().getById(planRowId)!!.updatedAt)
-        assertEquals("исходный пресет", db.exerciseDao().getById(exercise)!!.lastProgress)
-        assertEquals(T0, db.exerciseDao().getById(exercise)!!.updatedAt)
-        assertEquals("факт", workoutRows(workoutId).single().progress)
-
-        // После возврата в работу синхронизация снова доступна.
-        repository.reopenWorkout(workoutId)
-        assertEquals(
-            SyncResult.UpdatedPlanAndPreset,
-            repository.syncProgressToPlan(workoutId, workoutRow.id, now = T2),
-        )
-        assertEquals("факт", db.planDao().getById(planRowId)!!.progress)
+        assertEquals(SyncResult.UpdatedPlanAndPreset, result)
+        assertEquals("факт", db.planDao().getById(mondayPlanId)!!.progress)
+        assertEquals(T2, db.planDao().getById(mondayPlanId)!!.updatedAt)
         assertEquals("факт", db.exerciseDao().getById(exercise)!!.lastProgress)
+        assertEquals(T2, db.exerciseDao().getById(exercise)!!.updatedAt)
+        // Другой день недели и статус тренировки не меняются.
+        assertEquals("вт-план", db.planDao().getById(tuesdayPlanId)!!.progress)
+        assertEquals(T0, db.planDao().getById(tuesdayPlanId)!!.updatedAt)
+        assertEquals(WorkoutStatus.COMPLETED, db.workoutDao().getById(workoutId)!!.status)
+        assertEquals("факт", workoutRows(workoutId).single().progress)
     }
 
     @Test

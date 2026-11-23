@@ -28,7 +28,6 @@ class WorkoutMessageTextTest {
             R.string.workout_message_synced_preset_only,
             WorkoutMessage.SyncedPresetOnly.textRes,
         )
-        assertEquals(R.string.workout_message_not_in_progress, WorkoutMessage.NotInProgress.textRes)
     }
 
     @Test

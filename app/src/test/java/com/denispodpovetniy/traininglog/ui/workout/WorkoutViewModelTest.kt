@@ -325,7 +325,7 @@ class WorkoutViewModelTest {
     }
 
     @Test
-    fun `reload on completed workout changes nothing and emits no message`() = runTest {
+    fun `reload on completed workout syncs plan and preset and keeps status completed`() = runTest {
         val squat = insertExercise("Присед", lastProgress = "пресет")
         addPlanRow(weekday = 2, exerciseId = squat, position = 0, progress = "план")
         val workoutId = insertWorkout(status = WorkoutStatus.COMPLETED, completedAt = T_OLD)
@@ -333,12 +333,14 @@ class WorkoutViewModelTest {
         startViewModel(workoutId)
 
         assertEquals(WorkoutStatus.COMPLETED, viewModel.uiState.value.status)
+        currentNow = T_SYNC
         viewModel.reload(viewModel.uiState.value.exercises.single())
         advanceUntilIdle()
 
-        assertNull(viewModel.uiState.value.message)
-        assertEquals("план", db.planDao().findByWeekdayAndExercise(2, squat)!!.progress)
-        assertEquals("пресет", db.exerciseDao().getById(squat)!!.lastProgress)
+        assertEquals(WorkoutMessage.SyncedPlanAndPreset, viewModel.uiState.value.message)
+        assertEquals("факт", db.planDao().findByWeekdayAndExercise(2, squat)!!.progress)
+        assertEquals(T_SYNC, db.planDao().findByWeekdayAndExercise(2, squat)!!.updatedAt)
+        assertEquals("факт", db.exerciseDao().getById(squat)!!.lastProgress)
         assertEquals(WorkoutStatus.COMPLETED, db.workoutDao().getById(workoutId)!!.status)
     }
 

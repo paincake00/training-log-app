@@ -9,9 +9,6 @@ sealed interface SyncResult {
     /** Строки плана на этот день нет — обновлён только `lastProgress`. */
     data object UpdatedPresetOnly : SyncResult
 
-    /** Синхронизация доступна только для тренировки в статусе `IN_PROGRESS`. */
-    data object WorkoutNotInProgress : SyncResult
-
     /** Тренировка или упражнение тренировки не найдены. */
     data object NotFound : SyncResult
 }
