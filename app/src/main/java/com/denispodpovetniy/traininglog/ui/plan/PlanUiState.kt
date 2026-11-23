@@ -1,17 +1,28 @@
 package com.denispodpovetniy.traininglog.ui.plan
 
 import com.denispodpovetniy.traininglog.data.entity.ExerciseEntity
+import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
 import com.denispodpovetniy.traininglog.data.relation.PlanExerciseWithExercise
 
 /** Полное состояние экрана «Недельный план». */
 data class PlanUiState(
     /** Всегда ровно 7 дней, понедельник → воскресенье. */
     val days: List<PlanDayUi> = emptyList(),
+    /** Тренировка на сегодня, если она уже создана. */
+    val todayWorkout: TodayWorkoutUi? = null,
+    /** Одноразовое событие: открыть тренировку с этим id. */
+    val openWorkoutId: Long? = null,
     val pickerWeekday: Int? = null,
     val pickerQuery: String = "",
     val pickerResults: List<ExerciseEntity> = emptyList(),
     val dialog: PlanDialog? = null,
     val message: PlanMessage? = null,
+)
+
+/** Минимум данных о сегодняшней тренировке для CTA в плане. */
+data class TodayWorkoutUi(
+    val workoutId: Long,
+    val status: WorkoutStatus,
 )
 
 /** День недели плана: ISO 1..7. */

@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -38,12 +39,23 @@ class PlanViewModel(
     private val pickerQuery = MutableStateFlow("")
     private val dialog = MutableStateFlow<PlanDialog?>(null)
     private val message = MutableStateFlow<PlanMessage?>(null)
+    private val openWorkoutId = MutableStateFlow<Long?>(null)
     private val mutationInFlight = AtomicBoolean(false)
 
     private val searchResults: StateFlow<List<ExerciseEntity>> = pickerQuery
         .debounce(SEARCH_DEBOUNCE_MS)
         .flatMapLatest { query -> repository.searchExercises(query) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Сегодняшняя тренировка по логу — только id и статус для CTA. */
+    private val todayWorkoutState: StateFlow<TodayWorkoutUi?> = repository.observeLog()
+        .map { workouts ->
+            val todayEpochDay = today().toEpochDay()
+            workouts
+                .firstOrNull { it.workout.dateEpochDay == todayEpochDay }
+                ?.let { TodayWorkoutUi(it.workout.id, it.workout.status) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val pickerState = combine(
         repository.observePlan(),
@@ -61,8 +73,17 @@ class PlanViewModel(
         )
     }
 
-    val uiState: StateFlow<PlanUiState> = combine(pickerState, message) { state, currentMessage ->
-        state.copy(message = currentMessage)
+    val uiState: StateFlow<PlanUiState> = combine(
+        pickerState,
+        message,
+        todayWorkoutState,
+        openWorkoutId,
+    ) { state, currentMessage, todayWorkout, workoutToOpen ->
+        state.copy(
+            todayWorkout = todayWorkout,
+            openWorkoutId = workoutToOpen,
+            message = currentMessage,
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -70,6 +91,20 @@ class PlanViewModel(
             days = buildPlanDays(emptyList(), isoWeekday(today())),
         ),
     )
+
+    /**
+     * Создаёт тренировку на сегодня или возвращает существующую и просит UI открыть её.
+     */
+    fun startOrOpenTodayWorkout() {
+        launchMutation {
+            openWorkoutId.value = repository.createWorkoutForDate(today())
+        }
+    }
+
+    /** Забирает одноразовое событие открытия тренировки. */
+    fun consumeOpenWorkout() {
+        openWorkoutId.value = null
+    }
 
     fun openPicker(weekday: Int) {
         pickerQuery.value = ""

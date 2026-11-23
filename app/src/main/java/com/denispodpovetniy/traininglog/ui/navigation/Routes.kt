@@ -4,6 +4,12 @@ package com.denispodpovetniy.traininglog.ui.navigation
 object Routes {
     const val LOG = "log"
     const val PLAN = "plan"
+
+    const val WORKOUT_ID_ARG = "workoutId"
+    const val WORKOUT = "workout/{$WORKOUT_ID_ARG}"
+
+    /** Маршрут конкретной тренировки. */
+    fun workout(id: Long): String = "workout/$id"
 }
 
 /** Вкладки нижней навигации. */

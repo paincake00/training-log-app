@@ -6,6 +6,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.denispodpovetniy.traininglog.data.db.AppDatabase
 import com.denispodpovetniy.traininglog.data.entity.ExerciseEntity
 import com.denispodpovetniy.traininglog.data.entity.PlanExerciseEntity
+import com.denispodpovetniy.traininglog.data.entity.WorkoutExerciseEntity
+import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
 import com.denispodpovetniy.traininglog.data.repository.TrainingRepository
 import java.time.LocalDate
 import java.util.concurrent.Executor
@@ -21,6 +23,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
@@ -149,6 +152,54 @@ class PlanViewModelTest {
         assertEquals(listOf(0, 1, 2), rows.map { it.position })
     }
 
+    @Test
+    fun `start or open today workout creates once and returns same id`() = runTest {
+        val exerciseId = insertExercise("Жим", lastProgress = "5/20")
+        addPlanRow(weekday = 2, exerciseId = exerciseId, position = 0, progress = "5/20")
+        observeState()
+
+        assertNull(viewModel.uiState.value.todayWorkout)
+
+        viewModel.startOrOpenTodayWorkout()
+        advanceUntilIdle()
+
+        val workoutId = viewModel.uiState.value.openWorkoutId
+        assertNotNull(workoutId)
+        assertEquals(1, countRows("workouts"))
+        assertEquals(workoutId, viewModel.uiState.value.todayWorkout?.workoutId)
+        assertEquals(WorkoutStatus.IN_PROGRESS, viewModel.uiState.value.todayWorkout?.status)
+        // Упражнения скопированы из плана вторника с плановой прогрессией.
+        val rows = workoutRows(workoutId!!)
+        assertEquals(listOf(exerciseId), rows.map { it.exerciseId })
+        assertEquals(listOf("5/20"), rows.map { it.progress })
+
+        viewModel.consumeOpenWorkout()
+        advanceUntilIdle()
+        assertNull(viewModel.uiState.value.openWorkoutId)
+
+        viewModel.startOrOpenTodayWorkout()
+        advanceUntilIdle()
+
+        assertEquals(workoutId, viewModel.uiState.value.openWorkoutId)
+        assertEquals(1, countRows("workouts"))
+        assertEquals(1, workoutRows(workoutId).size)
+    }
+
+    @Test
+    fun `today workout reflects status after finish`() = runTest {
+        observeState()
+        viewModel.startOrOpenTodayWorkout()
+        advanceUntilIdle()
+        val workoutId = requireNotNull(viewModel.uiState.value.openWorkoutId)
+        assertEquals(WorkoutStatus.IN_PROGRESS, viewModel.uiState.value.todayWorkout?.status)
+
+        repository.finishWorkout(workoutId, now = T0)
+        advanceUntilIdle()
+
+        assertEquals(WorkoutStatus.COMPLETED, viewModel.uiState.value.todayWorkout?.status)
+        assertEquals(workoutId, viewModel.uiState.value.todayWorkout?.workoutId)
+    }
+
     private fun TestScope.observeState() {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         viewModel = PlanViewModel(repository, today = { TUESDAY })
@@ -174,18 +225,22 @@ class PlanViewModelTest {
         weekday: Int,
         exerciseId: Long,
         position: Int,
+        progress: String = "",
     ): Long = db.planDao().insert(
         PlanExerciseEntity(
             weekday = weekday,
             exerciseId = exerciseId,
             position = position,
-            progress = "",
+            progress = progress,
             updatedAt = T0,
         ),
     )
 
     private suspend fun planRows(weekday: Int): List<PlanExerciseEntity> =
         db.planDao().getByWeekday(weekday)
+
+    private suspend fun workoutRows(workoutId: Long): List<WorkoutExerciseEntity> =
+        db.workoutDao().getExercises(workoutId)
 
     private fun countRows(table: String): Int =
         db.openHelper.writableDatabase

@@ -18,11 +18,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -50,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.denispodpovetniy.traininglog.R
 import com.denispodpovetniy.traininglog.TrainingLogApp
+import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
 import com.denispodpovetniy.traininglog.ui.components.LongPressDescription
 import com.denispodpovetniy.traininglog.ui.exercises.CreateExerciseDialog
 import com.denispodpovetniy.traininglog.ui.exercises.EditIdentityDialog
@@ -61,7 +65,10 @@ import kotlinx.coroutines.launch
 private val RussianLocale: Locale = Locale.forLanguageTag("ru")
 
 @Composable
-fun PlanScreen(modifier: Modifier = Modifier) {
+fun PlanScreen(
+    onOpenWorkout: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val repository = (context.applicationContext as TrainingLogApp).container.trainingRepository
     val viewModel: PlanViewModel = viewModel(factory = PlanViewModel.Factory(repository))
@@ -83,6 +90,9 @@ fun PlanScreen(modifier: Modifier = Modifier) {
         onSaveProgress = viewModel::saveProgress,
         onDelete = viewModel::delete,
         onMove = viewModel::move,
+        onStartOrOpenTodayWorkout = viewModel::startOrOpenTodayWorkout,
+        onConsumeOpenWorkout = viewModel::consumeOpenWorkout,
+        onOpenWorkout = onOpenWorkout,
         onConsumeMessage = viewModel::consumeMessage,
         modifier = modifier,
     )
@@ -105,6 +115,9 @@ fun PlanContent(
     onSaveProgress: (row: PlanExerciseUi, progress: String) -> Unit,
     onDelete: (PlanExerciseUi) -> Unit,
     onMove: (row: PlanExerciseUi, delta: Int) -> Unit,
+    onStartOrOpenTodayWorkout: () -> Unit,
+    onConsumeOpenWorkout: () -> Unit,
+    onOpenWorkout: (Long) -> Unit,
     onConsumeMessage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -122,6 +135,12 @@ fun PlanContent(
         snackbarScope.launch { snackbarHostState.showSnackbar(text) }
     }
 
+    LaunchedEffect(state.openWorkoutId) {
+        val workoutId = state.openWorkoutId ?: return@LaunchedEffect
+        onConsumeOpenWorkout()
+        onOpenWorkout(workoutId)
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -131,12 +150,14 @@ fun PlanContent(
             items(state.days, key = { it.weekday }) { day ->
                 PlanDayCard(
                     day = day,
+                    todayWorkout = state.todayWorkout,
                     weekdays = weekdays,
                     onAdd = { onOpenPicker(day.weekday) },
                     onEditIdentity = onOpenEditIdentity,
                     onEditProgress = onOpenEditProgress,
                     onDelete = onOpenDelete,
                     onMove = onMove,
+                    onStartOrOpenTodayWorkout = onStartOrOpenTodayWorkout,
                 )
             }
         }
@@ -202,12 +223,14 @@ fun PlanContent(
 @Composable
 private fun PlanDayCard(
     day: PlanDayUi,
+    todayWorkout: TodayWorkoutUi?,
     weekdays: Array<String>,
     onAdd: () -> Unit,
     onEditIdentity: (PlanExerciseUi) -> Unit,
     onEditProgress: (PlanExerciseUi) -> Unit,
     onDelete: (PlanExerciseUi) -> Unit,
     onMove: (PlanExerciseUi, Int) -> Unit,
+    onStartOrOpenTodayWorkout: () -> Unit,
 ) {
     val userColors = MaterialTheme.colorScheme
     val border = if (day.isToday) {
@@ -280,6 +303,47 @@ private fun PlanDayCard(
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.plan_add))
             }
+
+            if (day.isToday) {
+                Spacer(Modifier.size(4.dp))
+                TodayWorkoutCta(
+                    workout = todayWorkout,
+                    onClick = onStartOrOpenTodayWorkout,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodayWorkoutCta(
+    workout: TodayWorkoutUi?,
+    onClick: () -> Unit,
+) {
+    val completed = workout?.status == WorkoutStatus.COMPLETED
+    val label = when (workout?.status) {
+        null -> R.string.plan_workout_start
+        WorkoutStatus.IN_PROGRESS -> R.string.plan_workout_continue
+        WorkoutStatus.COMPLETED -> R.string.plan_workout_open
+    }
+
+    if (completed) {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp),
+        ) {
+            Text(stringResource(label))
+        }
+    } else {
+        Button(
+            onClick = onClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp),
+        ) {
+            Text(stringResource(label))
         }
     }
 }

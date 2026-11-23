@@ -13,6 +13,9 @@
     <string name="plan_day_rest">Отдых</string>
     <string name="plan_today_header">Сегодня · %1$s</string>
     <string name="plan_add">Добавить</string>
+    <string name="plan_workout_start">Начать тренировку</string>
+    <string name="plan_workout_continue">Продолжить тренировку</string>
+    <string name="plan_workout_open">Открыть тренировку</string>
     <string name="plan_exercise_actions">Действия с упражнением</string>
     <string name="plan_action_edit_identity">Изменить название и описание</string>
     <string name="plan_action_edit_progress">Изменить прогрессию</string>
@@ -61,4 +64,39 @@
     <string name="dialog_delete_confirm_title">Удалить упражнение?</string>
     <string name="dialog_delete_confirm_text">Упражнение будет удалено только из этого дня плана.</string>
     <string name="dialog_delete">Удалить</string>
+
+    <string name="workout_back">Назад</string>
+    <string name="workout_title_placeholder">Тренировка</string>
+    <string name="workout_actions">Действия с тренировкой</string>
+    <string name="workout_status_draft">Черновик</string>
+    <string name="workout_status_completed">Завершена</string>
+    <string name="workout_action_reopen">Вернуть в работу</string>
+    <string name="workout_action_delete">Удалить тренировку</string>
+    <string name="workout_exercise_actions">Действия с упражнением</string>
+    <string name="workout_action_edit_identity">Изменить название и описание</string>
+    <string name="workout_action_move_up">Переместить выше</string>
+    <string name="workout_action_move_down">Переместить ниже</string>
+    <string name="workout_action_delete_exercise">Удалить из тренировки</string>
+    <string name="workout_plan_label">По плану:</string>
+    <string name="workout_progress_label">Факт</string>
+    <string name="workout_reload">Обновить прогрессию в плане</string>
+    <string name="workout_add_exercise">Добавить упражнение</string>
+    <string name="workout_finish">Завершить тренировку</string>
+    <string name="workout_completed">Тренировка завершена</string>
+    <string name="workout_empty">В этой тренировке пока нет упражнений</string>
+    <string name="workout_loading">Загрузка…</string>
+    <string name="workout_not_found">Тренировка не найдена</string>
+
+    <string name="workout_message_duplicate">Упражнение уже добавлено</string>
+    <string name="workout_message_not_found">Упражнение не найдено</string>
+    <string name="workout_message_save_failed">Не удалось сохранить изменения</string>
+    <string name="workout_message_synced_plan_and_preset">Прогрессия обновлена в плане и пресете</string>
+    <string name="workout_message_synced_preset_only">В плане на этот день упражнения нет. Обновлена только последняя прогрессия</string>
+    <string name="workout_message_not_in_progress">Тренировка уже завершена</string>
+
+    <string name="workout_delete_exercise_title">Удалить упражнение?</string>
+    <string name="workout_delete_exercise_text">Упражнение «%1$s» будет удалено только из этой тренировки.</string>
+    <string name="workout_delete_exercise_text_no_name">Упражнение будет удалено только из этой тренировки.</string>
+    <string name="workout_delete_workout_title">Удалить тренировку?</string>
+    <string name="workout_delete_workout_text">Тренировка будет удалена вместе с упражнениями. Пресеты и план останутся.</string>
 </resources>
