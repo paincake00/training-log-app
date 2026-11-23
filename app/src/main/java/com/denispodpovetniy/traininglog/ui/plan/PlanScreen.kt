@@ -2,51 +2,38 @@ package com.denispodpovetniy.traininglog.ui.plan
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,15 +44,17 @@ import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.denispodpovetniy.traininglog.R
 import com.denispodpovetniy.traininglog.TrainingLogApp
-import com.denispodpovetniy.traininglog.data.entity.ExerciseEntity
 import com.denispodpovetniy.traininglog.ui.components.LongPressDescription
+import com.denispodpovetniy.traininglog.ui.exercises.CreateExerciseDialog
+import com.denispodpovetniy.traininglog.ui.exercises.EditIdentityDialog
+import com.denispodpovetniy.traininglog.ui.exercises.EditProgressDialog
+import com.denispodpovetniy.traininglog.ui.exercises.ExercisePickerSheet
 import java.util.Locale
 import kotlinx.coroutines.launch
 
@@ -162,22 +151,21 @@ fun PlanContent(
         }
     }
 
-    if (state.pickerWeekday != null) {
-        ExercisePickerSheet(
-            query = state.pickerQuery,
-            results = state.pickerResults,
-            snackbarHostState = snackbarHostState,
-            onQueryChange = onPickerQueryChange,
-            onSelect = onAddExisting,
-            onCreateNew = onOpenCreateFromPicker,
-            onDismiss = onClosePicker,
-        )
-    }
+    ExercisePickerSheet(
+        visible = state.pickerWeekday != null,
+        query = state.pickerQuery,
+        results = state.pickerResults,
+        onQueryChange = onPickerQueryChange,
+        onSelect = onAddExisting,
+        onCreateNew = onOpenCreateFromPicker,
+        onDismiss = onClosePicker,
+        snackbarHostState = snackbarHostState,
+    )
 
     when (val dialog = state.dialog) {
         is PlanDialog.Create -> CreateExerciseDialog(
             onDismiss = onDismissDialog,
-            onConfirm = onSaveNewExercise,
+            onSave = onSaveNewExercise,
         )
 
         is PlanDialog.EditIdentity -> {
@@ -186,7 +174,7 @@ fun PlanContent(
                 initialName = dialog.name,
                 initialDescription = dialog.description,
                 onDismiss = onDismissDialog,
-                onConfirm = { name, description -> row?.let { onSaveIdentity(it, name, description) } },
+                onSave = { name, description -> row?.let { onSaveIdentity(it, name, description) } },
             )
         }
 
@@ -195,7 +183,7 @@ fun PlanContent(
             EditProgressDialog(
                 initialProgress = dialog.progress,
                 onDismiss = onDismissDialog,
-                onConfirm = { progress -> row?.let { onSaveProgress(it, progress) } },
+                onSave = { progress -> row?.let { onSaveProgress(it, progress) } },
             )
         }
 
@@ -442,289 +430,6 @@ private fun ExerciseActionsMenu(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ExercisePickerSheet(
-    query: String,
-    results: List<ExerciseEntity>,
-    snackbarHostState: SnackbarHostState,
-    onQueryChange: (String) -> Unit,
-    onSelect: (Long) -> Unit,
-    onCreateNew: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val colors = MaterialTheme.colorScheme
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        modifier = Modifier.fillMaxHeight(0.85f),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.picker_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = colors.onSurface,
-                modifier = Modifier.padding(bottom = 12.dp),
-            )
-
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text(stringResource(R.string.picker_search_placeholder)) },
-                leadingIcon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_search),
-                        contentDescription = null,
-                    )
-                },
-                trailingIcon = if (query.isNotEmpty()) {
-                    {
-                        IconButton(onClick = { onQueryChange("") }) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_close),
-                                contentDescription = stringResource(R.string.picker_search_clear),
-                            )
-                        }
-                    }
-                } else {
-                    null
-                },
-                singleLine = true,
-            )
-
-            Spacer(Modifier.size(8.dp))
-
-            if (results.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = stringResource(R.string.picker_empty),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurfaceVariant,
-                    )
-                }
-            } else {
-                LazyColumn(modifier = Modifier.weight(1f)) {
-                    items(results, key = { it.id }) { exercise ->
-                        ExercisePickerRow(
-                            exercise = exercise,
-                            onClick = { onSelect(exercise.id) },
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.size(8.dp))
-
-            OutlinedButton(
-                onClick = onCreateNew,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp),
-            ) {
-                Text(stringResource(R.string.picker_create_new))
-            }
-
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Spacer(Modifier.size(16.dp))
-        }
-    }
-}
-
-@Composable
-private fun ExercisePickerRow(
-    exercise: ExerciseEntity,
-    onClick: () -> Unit,
-) {
-    val colors = MaterialTheme.colorScheme
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 64.dp)
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = exercise.name,
-            style = MaterialTheme.typography.titleMedium,
-            color = colors.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (exercise.description.isNotBlank()) {
-            Spacer(Modifier.size(2.dp))
-            Text(
-                text = exercise.description,
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (exercise.lastProgress.isNotBlank()) {
-            Spacer(Modifier.size(2.dp))
-            Text(
-                text = exercise.lastProgress,
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                color = colors.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun CreateExerciseDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (name: String, description: String, progress: String) -> Unit,
-) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var description by rememberSaveable { mutableStateOf("") }
-    var progress by rememberSaveable { mutableStateOf("") }
-    val canSave = name.isNotBlank()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.dialog_create_title)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .imePadding(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                NameField(
-                    value = name,
-                    onValueChange = { name = it },
-                )
-                DescriptionField(
-                    value = description,
-                    onValueChange = { description = it },
-                )
-                ProgressField(
-                    value = progress,
-                    onValueChange = { progress = it },
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(name, description, progress) },
-                enabled = canSave,
-            ) {
-                Text(stringResource(R.string.dialog_add))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.dialog_cancel))
-            }
-        },
-    )
-}
-
-@Composable
-private fun EditIdentityDialog(
-    initialName: String,
-    initialDescription: String,
-    onDismiss: () -> Unit,
-    onConfirm: (name: String, description: String) -> Unit,
-) {
-    var name by rememberSaveable { mutableStateOf(initialName) }
-    var description by rememberSaveable { mutableStateOf(initialDescription) }
-    val canSave = name.isNotBlank()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.dialog_identity_title)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .imePadding(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.dialog_identity_warning),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                NameField(
-                    value = name,
-                    onValueChange = { name = it },
-                )
-                DescriptionField(
-                    value = description,
-                    onValueChange = { description = it },
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(name, description) },
-                enabled = canSave,
-            ) {
-                Text(stringResource(R.string.dialog_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.dialog_cancel))
-            }
-        },
-    )
-}
-
-@Composable
-private fun EditProgressDialog(
-    initialProgress: String,
-    onDismiss: () -> Unit,
-    onConfirm: (progress: String) -> Unit,
-) {
-    var progress by rememberSaveable { mutableStateOf(initialProgress) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.dialog_progress_title)) },
-        text = {
-            ProgressField(
-                value = progress,
-                onValueChange = { progress = it },
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(progress) }) {
-                Text(stringResource(R.string.dialog_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.dialog_cancel))
-            }
-        },
-    )
-}
-
 @Composable
 private fun ConfirmDeleteDialog(
     onDismiss: () -> Unit,
@@ -747,60 +452,6 @@ private fun ConfirmDeleteDialog(
                 Text(stringResource(R.string.dialog_cancel))
             }
         },
-    )
-}
-
-@Composable
-private fun NameField(
-    value: String,
-    onValueChange: (String) -> Unit,
-) {
-    val isBlank = value.isBlank()
-
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(stringResource(R.string.dialog_name_label)) },
-        singleLine = true,
-        isError = isBlank,
-        supportingText = if (isBlank) {
-            { Text(stringResource(R.string.dialog_name_required)) }
-        } else {
-            null
-        },
-    )
-}
-
-@Composable
-private fun DescriptionField(
-    value: String,
-    onValueChange: (String) -> Unit,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(stringResource(R.string.dialog_description_label)) },
-        minLines = 2,
-        maxLines = 4,
-    )
-}
-
-@Composable
-private fun ProgressField(
-    value: String,
-    onValueChange: (String) -> Unit,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(stringResource(R.string.dialog_progress_label)) },
-        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-        minLines = 1,
-        maxLines = 4,
     )
 }
 
