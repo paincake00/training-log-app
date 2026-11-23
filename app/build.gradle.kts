@@ -16,12 +16,25 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
+    }
+
+    signingConfigs {
+        val storePath = System.getenv("TRAINING_LOG_STORE_FILE")
+        if (storePath != null) {
+            create("release") {
+                storeFile = file(storePath)
+                storePassword = System.getenv("TRAINING_LOG_STORE_PASSWORD")
+                keyAlias = System.getenv("TRAINING_LOG_KEY_ALIAS")
+                keyPassword = System.getenv("TRAINING_LOG_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

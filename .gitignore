@@ -18,6 +18,7 @@ local.properties
 app/build/
 *.apk
 *.aab
+dist/
 
 # Signing
 *.jks
@@ -26,3 +27,5 @@ keystore.properties
 
 # Logs
 *.log
+
+.env
