@@ -65,6 +65,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.denispodpovetniy.traininglog.R
 import com.denispodpovetniy.traininglog.TrainingLogApp
 import com.denispodpovetniy.traininglog.data.entity.ExerciseEntity
+import com.denispodpovetniy.traininglog.ui.components.LongPressDescription
 import java.util.Locale
 import kotlinx.coroutines.launch
 
@@ -321,33 +322,38 @@ private fun PlanExerciseRow(
     val colors = MaterialTheme.colorScheme
 
     Row(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = exercise.name,
-                style = MaterialTheme.typography.titleMedium,
-                color = colors.onSurface,
-            )
-            if (exercise.progress.isNotBlank()) {
-                Spacer(Modifier.size(4.dp))
+        LongPressDescription(
+            description = exercise.description,
+            modifier = Modifier.weight(1f),
+        ) {
+            Column {
                 Text(
-                    text = exercise.progress,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Medium,
-                    ),
-                    color = colors.primary,
-                    modifier = Modifier.fillMaxWidth(),
+                    text = exercise.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.onSurface,
                 )
-            }
-            if (exercise.description.isNotBlank()) {
-                Spacer(Modifier.size(4.dp))
-                Text(
-                    text = exercise.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (exercise.progress.isNotBlank()) {
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        text = exercise.progress,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                        color = colors.primary,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (exercise.description.isNotBlank()) {
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        text = exercise.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
 
