@@ -12,6 +12,7 @@
 - [PLAN.md](PLAN.md) — продуктовые требования, модель данных, экраны, тесты, acceptance criteria.
 - [DESIGN.md](DESIGN.md) — UI-стандарт: сетка, цвета, типографика, компоненты, состояния.
 - [AGENTS.md](AGENTS.md) — правила работы агентов: декомпозиция, суб-агенты, тесты, Definition of Done.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — как предложить изменение, форкнуть проект и открыть PR в `main`.
 
 ## Статус
 
