@@ -169,10 +169,10 @@ class PlanViewModelTest {
         assertEquals(1, countRows("workouts"))
         assertEquals(workoutId, viewModel.uiState.value.todayWorkout?.workoutId)
         assertEquals(WorkoutStatus.IN_PROGRESS, viewModel.uiState.value.todayWorkout?.status)
-        // Упражнения скопированы из плана вторника с плановой прогрессией.
+        // Упражнения скопированы из плана вторника, фактическая прогрессия пустая.
         val rows = workoutRows(workoutId!!)
         assertEquals(listOf(exerciseId), rows.map { it.exerciseId })
-        assertEquals(listOf("5/20"), rows.map { it.progress })
+        assertEquals(listOf(""), rows.map { it.progress })
 
         viewModel.consumeOpenWorkout()
         advanceUntilIdle()

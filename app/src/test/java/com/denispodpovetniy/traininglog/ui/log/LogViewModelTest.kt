@@ -87,8 +87,9 @@ class LogViewModelTest {
             listOf(exerciseId),
             db.workoutDao().getExercises(workoutId).map { it.exerciseId },
         )
+        // Фактическая прогрессия начинается пустой: плановое значение — подсказка.
         assertEquals(
-            listOf("5/20"),
+            listOf(""),
             db.workoutDao().getExercises(workoutId).map { it.progress },
         )
     }

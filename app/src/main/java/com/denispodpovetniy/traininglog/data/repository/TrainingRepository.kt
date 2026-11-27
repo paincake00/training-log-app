@@ -144,7 +144,9 @@ class TrainingRepository(private val db: AppDatabase) {
      * Идемпотентно возвращает тренировку на [date], создавая её при необходимости.
      *
      * В одной транзакции создаётся тренировка `IN_PROGRESS` и копируются упражнения
-     * плана соответствующего дня недели в порядке позиций с плановой прогрессией.
+     * плана соответствующего дня недели в порядке позиций. Строки тренировки
+     * создаются с пустой фактической прогрессией: плановая прогрессия остаётся
+     * в плане и показывается в UI только подсказкой «По плану».
      * Пустой план даёт пустую тренировку.
      */
     suspend fun createWorkoutForDate(
@@ -168,7 +170,8 @@ class TrainingRepository(private val db: AppDatabase) {
                     workoutId = workoutId,
                     exerciseId = planExercise.exerciseId,
                     position = planExercise.position,
-                    progress = planExercise.progress,
+                    // Плановое значение — только подсказка, фактическая прогрессия пустая.
+                    progress = "",
                     updatedAt = now,
                 ),
             )
