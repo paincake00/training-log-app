@@ -124,6 +124,7 @@
 
     <string name="sets_label">Подходы</string>
     <string name="sets_add">Добавить подход</string>
+    <string name="sets_delete">Удалить подход</string>
     <string name="sets_delete_title">Удалить подход?</string>
     <string name="sets_delete_text">Подход будет удалён из этой прогрессии.</string>
     <string name="sets_legacy_hint">Значений больше, чем единиц</string>

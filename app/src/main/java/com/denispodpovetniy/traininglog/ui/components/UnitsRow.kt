@@ -152,20 +152,15 @@ fun UnitsRow(
                 }
             }
             if (enabled) {
-                OutlinedIconButton(
+                AddTileButton(
+                    contentDescription = stringResource(R.string.units_add),
                     onClick = {
                         editingIndex = null
                         draft = ""
                         errorText = null
                         adding = true
                     },
-                    modifier = Modifier.size(48.dp),
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_add),
-                        contentDescription = stringResource(R.string.units_add),
-                    )
-                }
+                )
             }
         }
 
