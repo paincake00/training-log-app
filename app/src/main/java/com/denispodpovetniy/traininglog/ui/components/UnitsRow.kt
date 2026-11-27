@@ -1,18 +1,20 @@
 package com.denispodpovetniy.traininglog.ui.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -23,10 +25,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.Surface
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,7 +43,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.denispodpovetniy.traininglog.R
+import androidx.activity.compose.BackHandler
 import com.denispodpovetniy.traininglog.util.ProgressCodec
+import kotlinx.coroutines.delay
 
 /**
  * Строка единиц измерения упражнения: плитки через `/`, в конце — «+».
@@ -70,8 +73,28 @@ fun UnitsRow(
     var editingIndex by remember { mutableStateOf<Int?>(null) }
     val focusRequester = remember { FocusRequester() }
 
+    val cancelAdding: () -> Unit = {
+        adding = false
+        draft = ""
+        errorText = null
+        editingIndex = null
+    }
+
+    // Системная «Назад» закрывает встроенное поле, а не экран/диалог.
+    BackHandler(enabled = adding, onBack = cancelAdding)
+
+    val sectionBringIntoView = remember { BringIntoViewRequester() }
+
     LaunchedEffect(adding) {
-        if (adding) focusRequester.requestFocus()
+        if (adding) {
+            focusRequester.requestFocus()
+            // Показываем поле и подсказки целиком: снизу их перекрывает
+            // панель «Завершить тренировку» и клавиатура. Повторяем после
+            // анимации IME, иначе прокрутка считается по старому вьюпорту.
+            sectionBringIntoView.bringIntoView()
+            delay(300)
+            sectionBringIntoView.bringIntoView()
+        }
     }
 
     val submit: (String?) -> Unit = { suggestion ->
@@ -118,7 +141,7 @@ fun UnitsRow(
         }
 
         FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
@@ -146,19 +169,26 @@ fun UnitsRow(
                             text = ProgressCodec.VALUE_SEPARATOR,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 6.dp),
+                            modifier = Modifier.padding(horizontal = 2.dp),
                         )
                     }
                 }
             }
             if (enabled) {
                 AddTileButton(
-                    contentDescription = stringResource(R.string.units_add),
+                    contentDescription = stringResource(
+                        if (adding) R.string.units_add_cancel else R.string.units_add,
+                    ),
+                    expanded = adding,
                     onClick = {
-                        editingIndex = null
-                        draft = ""
-                        errorText = null
-                        adding = true
+                        if (adding) {
+                            cancelAdding()
+                        } else {
+                            editingIndex = null
+                            draft = ""
+                            errorText = null
+                            adding = true
+                        }
                     },
                 )
             }
@@ -175,6 +205,7 @@ fun UnitsRow(
 
         if (adding) {
             Spacer(Modifier.height(8.dp))
+            Column(modifier = Modifier.bringIntoViewRequester(sectionBringIntoView)) {
             OutlinedTextField(
                 value = draft,
                 onValueChange = {
@@ -207,15 +238,12 @@ fun UnitsRow(
                 ProgressCodec.normalizeUnit(it, units) != null
             }
             if (available.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.units_suggestions),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                FlowRow(
+                // Подсказки в одну строку с горизонтальной прокруткой: секция
+                // остаётся компактной и не уезжает под нижнюю панель при клавиатуре.
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     available.take(MAX_SUGGESTIONS).forEach { suggestion ->
                         SuggestionChip(
@@ -232,6 +260,7 @@ fun UnitsRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            }
         }
     }
 }
@@ -246,20 +275,21 @@ private fun UnitChip(
     var menuVisible by remember { mutableStateOf(false) }
 
     Box {
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier
-                .minimumInteractiveComponentSize()
-                .clickable(enabled = enabled) { menuVisible = true },
-        ) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            )
-        }
+        SuggestionChip(
+            onClick = { menuVisible = true },
+            enabled = enabled,
+            label = {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            },
+            colors = SuggestionChipDefaults.suggestionChipColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
+            border = null,
+        )
 
         DropdownMenu(
             expanded = menuVisible,

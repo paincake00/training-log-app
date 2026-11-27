@@ -21,6 +21,7 @@ fun AddTileButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    expanded: Boolean = false,
 ) {
     OutlinedIconButton(
         onClick = onClick,
@@ -28,7 +29,7 @@ fun AddTileButton(
         enabled = enabled,
     ) {
         Icon(
-            painter = painterResource(R.drawable.ic_add),
+            painter = painterResource(if (expanded) R.drawable.ic_close else R.drawable.ic_add),
             contentDescription = contentDescription,
             modifier = Modifier.size(20.dp),
         )

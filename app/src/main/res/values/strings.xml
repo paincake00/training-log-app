@@ -109,12 +109,12 @@
 
     <string name="units_label">Единицы</string>
     <string name="units_add">Добавить единицу</string>
+    <string name="units_add_cancel">Закрыть добавление единицы</string>
     <string name="units_empty">Единицы не заданы</string>
     <string name="units_hint">Единицы общие для всех тренировок. Изменения применятся везде.</string>
     <string name="units_name_label">Название единицы</string>
     <string name="units_name_duplicate">Такая единица уже есть</string>
     <string name="units_name_invalid">Название должно быть от 1 до 20 символов</string>
-    <string name="units_suggestions">Подсказки</string>
     <string name="units_confirm">Добавить</string>
     <string name="unit_action_rename">Переименовать</string>
     <string name="unit_action_delete">Удалить</string>
