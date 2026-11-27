@@ -32,6 +32,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Отдельный applicationId, чтобы debug-сборка ставилась рядом
+            // с подписанным release и не требовала удаления данных.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")
