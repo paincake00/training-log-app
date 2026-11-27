@@ -4,6 +4,7 @@ import com.denispodpovetniy.traininglog.data.entity.ExerciseEntity
 import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
 import com.denispodpovetniy.traininglog.data.relation.PlanExerciseWithExercise
 import com.denispodpovetniy.traininglog.data.relation.WorkoutWithExercises
+import com.denispodpovetniy.traininglog.util.ProgressCodec
 import com.denispodpovetniy.traininglog.util.isoWeekday
 import java.time.LocalDate
 
@@ -19,6 +20,8 @@ data class WorkoutUiState(
     val pickerVisible: Boolean = false,
     val pickerQuery: String = "",
     val pickerResults: List<ExerciseEntity> = emptyList(),
+    /** Подсказки единиц: сохранённые пользователем и стартовый список. */
+    val unitSuggestions: List<String> = emptyList(),
     val dialog: WorkoutDialog? = null,
     val message: WorkoutMessage? = null,
     /** Одноразовое событие выхода с экрана. */
@@ -33,6 +36,8 @@ data class WorkoutExerciseUi(
     val description: String,
     /** Плановая прогрессия на день недели тренировки; пустая — подсказку не показываем. */
     val planProgress: String,
+    /** Единицы измерения пресета. */
+    val units: List<String>,
     /** Фактическая прогрессия с учётом ещё не сохранённого ввода. */
     val progress: String,
     val position: Int,
@@ -55,6 +60,27 @@ sealed interface WorkoutDialog {
         val exerciseName: String,
     ) : WorkoutDialog
 
+    data class RenameUnit(
+        val exerciseId: Long,
+        val index: Int,
+        val currentName: String,
+    ) : WorkoutDialog
+
+    data class ConfirmRemoveUnit(
+        val exerciseId: Long,
+        val index: Int,
+        val unitName: String,
+    ) : WorkoutDialog
+
+    data class ConfirmRemoveSet(
+        val rowId: Long,
+        val setIndex: Int,
+    ) : WorkoutDialog
+
+    data class ConfirmRewriteProgress(
+        val rowId: Long,
+    ) : WorkoutDialog
+
     data object ConfirmDeleteWorkout : WorkoutDialog
 }
 
@@ -65,6 +91,7 @@ enum class WorkoutMessage {
     SaveFailed,
     SyncedPlanAndPreset,
     SyncedPresetOnly,
+    UnitRemoved,
 }
 
 /** Одноразовое событие выхода с экрана тренировки. */
@@ -115,6 +142,7 @@ fun buildWorkoutUiState(
                 name = row.exercise.name,
                 description = row.exercise.description,
                 planProgress = planProgressByExerciseId[row.exercise.id].orEmpty(),
+                units = ProgressCodec.decodeUnits(row.exercise.units),
                 progress = progressOverrides[row.workoutExercise.id] ?: row.workoutExercise.progress,
                 position = row.workoutExercise.position,
             )
@@ -132,7 +160,7 @@ fun buildWorkoutUiState(
 /**
  * Синхронизация фактической прогрессии в план доступна, когда есть что переносить.
  */
-fun canSyncProgressToPlan(progress: String): Boolean = progress.isNotBlank()
+fun canSyncProgressToPlan(progress: String): Boolean = ProgressCodec.hasValues(progress)
 
 /**
  * Возвращает новый порядок строк тренировки после сдвига [rowId] на [delta].

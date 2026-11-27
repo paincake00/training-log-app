@@ -9,6 +9,7 @@ import com.denispodpovetniy.traininglog.data.repository.AddResult
 import com.denispodpovetniy.traininglog.data.repository.CreateExerciseResult
 import com.denispodpovetniy.traininglog.data.repository.SyncResult
 import com.denispodpovetniy.traininglog.data.repository.TrainingRepository
+import com.denispodpovetniy.traininglog.util.ProgressCodec
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -61,6 +62,9 @@ class WorkoutViewModel(
         .flatMapLatest { query -> repository.searchExercises(query) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    private val unitSuggestions: StateFlow<List<String>> = repository.observeUnitSuggestions()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProgressCodec.BUILT_IN_UNITS)
+
     private val contentState = combine(
         repository.observeWorkout(workoutId),
         repository.observePlan(),
@@ -93,11 +97,13 @@ class WorkoutViewModel(
         pickerState,
         message,
         exit,
-    ) { content, picker, currentMessage, exitEvent ->
+        unitSuggestions,
+    ) { content, picker, currentMessage, exitEvent, suggestions ->
         content.copy(
             pickerVisible = picker.visible,
             pickerQuery = picker.query,
             pickerResults = picker.results,
+            unitSuggestions = suggestions,
             dialog = picker.dialog,
             message = currentMessage,
             exit = exitEvent,
@@ -132,6 +138,69 @@ class WorkoutViewModel(
 
     fun onProgressChange(rowId: Long, text: String) {
         progressOverrides.update { it + (rowId to text) }
+    }
+
+    /** Меняет одно значение подхода; строка прогрессии остаётся канонической. */
+    fun onValueChange(rowId: Long, setIndex: Int, valueIndex: Int, value: String) {
+        val row = rowById(rowId) ?: return
+        val updated = ProgressCodec.withValue(
+            raw = row.progress,
+            unitCount = row.units.size,
+            setIndex = setIndex,
+            valueIndex = valueIndex,
+            value = ProgressCodec.sanitizeValue(value),
+        )
+        progressOverrides.update { it + (rowId to updated) }
+    }
+
+    fun onAddSet(rowId: Long) {
+        val row = rowById(rowId) ?: return
+        val updated = ProgressCodec.addSet(row.progress, row.units.size)
+        progressOverrides.update { it + (rowId to updated) }
+    }
+
+    fun onRemoveSet(rowId: Long, setIndex: Int) {
+        val row = rowById(rowId) ?: return
+        val updated = ProgressCodec.removeSet(row.progress, setIndex)
+        progressOverrides.update { it + (rowId to updated) }
+    }
+
+    /** Очищает строку старого формата, чтобы начать ввод заново. */
+    fun onRewriteProgress(rowId: Long) {
+        progressOverrides.update { it + (rowId to "") }
+    }
+
+    fun addUnit(exerciseId: Long, name: String) {
+        launchMutation {
+            val units = unitsOf(exerciseId) ?: return@launchMutation
+            if (!repository.updateExerciseUnits(exerciseId, units + name, now = now())) {
+                message.value = WorkoutMessage.SaveFailed
+            }
+        }
+    }
+
+    fun renameUnit(exerciseId: Long, index: Int, name: String) {
+        launchMutation {
+            val units = unitsOf(exerciseId) ?: return@launchMutation
+            val updated = units.toMutableList().apply { this[index] = name }
+            if (repository.updateExerciseUnits(exerciseId, updated, now = now())) {
+                dismissDialog()
+            } else {
+                message.value = WorkoutMessage.SaveFailed
+            }
+        }
+    }
+
+    fun removeUnit(exerciseId: Long, index: Int) {
+        launchMutation {
+            flushProgress()
+            if (repository.removeExerciseUnit(exerciseId, index, now = now())) {
+                dismissDialog()
+                message.value = WorkoutMessage.UnitRemoved
+            } else {
+                message.value = WorkoutMessage.SaveFailed
+            }
+        }
     }
 
     fun openPicker() {
@@ -173,7 +242,7 @@ class WorkoutViewModel(
         dialog.value = WorkoutDialog.Create
     }
 
-    fun saveNewExercise(name: String, description: String, progress: String) {
+    fun saveNewExercise(name: String, description: String, units: List<String>, progress: String) {
         if (dialog.value !is WorkoutDialog.Create) return
         launchMutation {
             when (
@@ -182,7 +251,8 @@ class WorkoutViewModel(
                     name = name,
                     description = description,
                     progress = progress,
-                    now = now(),
+                    units = units,
+                   now = now(),
                 )
             ) {
                 is CreateExerciseResult.Created -> dismissDialog()
@@ -207,6 +277,22 @@ class WorkoutViewModel(
             rowId = row.rowId,
             exerciseName = row.name,
         )
+    }
+
+    fun openRenameUnit(exerciseId: Long, index: Int, currentName: String) {
+        dialog.value = WorkoutDialog.RenameUnit(exerciseId, index, currentName)
+    }
+
+    fun openRemoveUnit(exerciseId: Long, index: Int, unitName: String) {
+        dialog.value = WorkoutDialog.ConfirmRemoveUnit(exerciseId, index, unitName)
+    }
+
+    fun openRemoveSet(rowId: Long, setIndex: Int) {
+        dialog.value = WorkoutDialog.ConfirmRemoveSet(rowId, setIndex)
+    }
+
+    fun openRewriteProgress(rowId: Long) {
+        dialog.value = WorkoutDialog.ConfirmRewriteProgress(rowId)
     }
 
     fun openDeleteWorkout() {
@@ -310,6 +396,12 @@ class WorkoutViewModel(
     fun consumeExit() {
         exit.value = null
     }
+
+    private fun rowById(rowId: Long): WorkoutExerciseUi? =
+        uiState.value.exercises.firstOrNull { it.rowId == rowId }
+
+    private fun unitsOf(exerciseId: Long): List<String>? =
+        uiState.value.exercises.firstOrNull { it.exerciseId == exerciseId }?.units
 
     private suspend fun savePendingProgress() {
         // Ввод может прийти, пока предыдущая запись ещё выполняется. Повторяем

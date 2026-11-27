@@ -25,6 +25,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -100,14 +101,14 @@ class PlanViewModelTest {
         assertEquals(PlanDialog.Create(1), viewModel.uiState.value.dialog)
         assertNull(viewModel.uiState.value.pickerWeekday)
 
-        viewModel.saveNewExercise(name = " ", description = "", progress = "")
+        viewModel.saveNewExercise(name = " ", description = "", units = emptyList(), progress = "")
         advanceUntilIdle()
 
         assertEquals(PlanDialog.Create(1), viewModel.uiState.value.dialog)
         assertEquals(PlanMessage.SaveFailed, viewModel.uiState.value.message)
         assertEquals(0, countRows("exercises"))
 
-        viewModel.saveNewExercise(name = "Присед", description = "Ноги", progress = "3/10")
+        viewModel.saveNewExercise(name = "Присед", description = "Ноги", units = emptyList(), progress = "3/10")
         advanceUntilIdle()
 
         assertNull(viewModel.uiState.value.dialog)
@@ -125,8 +126,8 @@ class PlanViewModelTest {
 
         // Оба вызова происходят до запуска первой операции:
         // второй должен быть отброшен защитой mutationInFlight.
-        viewModel.saveNewExercise(name = "Присед", description = "", progress = "3/10")
-        viewModel.saveNewExercise(name = "Присед", description = "", progress = "3/10")
+        viewModel.saveNewExercise(name = "Присед", description = "", units = emptyList(), progress = "3/10")
+        viewModel.saveNewExercise(name = "Присед", description = "", units = emptyList(), progress = "3/10")
         advanceUntilIdle()
 
         assertEquals(1, countRows("exercises"))
@@ -200,6 +201,54 @@ class PlanViewModelTest {
         assertEquals(workoutId, viewModel.uiState.value.todayWorkout?.workoutId)
     }
 
+    // ------------------------------------------------------- единицы измерения
+
+    @Test
+    fun `rename unit updates preset and keeps plan progress`() = runTest {
+        val exerciseId = insertExercise("Ходьба", lastProgress = "20/4,6", units = "мин\nкм/ч")
+        addPlanRow(weekday = 2, exerciseId = exerciseId, position = 0, progress = "20/4,6-30/4,5")
+        observeState()
+
+        viewModel.renameUnit(exerciseId, index = 1, name = "скорость")
+        advanceUntilIdle()
+
+        assertEquals("мин\nскорость", db.exerciseDao().getById(exerciseId)!!.units)
+        assertEquals("20/4,6-30/4,5", planRows(2).single().progress)
+        assertEquals(
+            listOf("мин", "скорость"),
+            viewModel.uiState.value.days.first { it.weekday == 2 }.exercises.single().units,
+        )
+    }
+
+    @Test
+    fun `add unit appends it to preset and suggestions without touching progress`() = runTest {
+        val exerciseId = insertExercise("Ходьба", units = "мин")
+        addPlanRow(weekday = 2, exerciseId = exerciseId, position = 0, progress = "20-30")
+        observeState()
+
+        viewModel.addUnit(exerciseId, "наклон")
+        advanceUntilIdle()
+
+        assertEquals("мин\nнаклон", db.exerciseDao().getById(exerciseId)!!.units)
+        assertEquals("20-30", planRows(2).single().progress)
+        assertTrue(viewModel.uiState.value.unitSuggestions.contains("наклон"))
+    }
+
+    @Test
+    fun `remove unit strips values from plan rows and last progress`() = runTest {
+        val exerciseId = insertExercise("Ходьба", lastProgress = "20/4,6", units = "мин\nкм/ч")
+        addPlanRow(weekday = 2, exerciseId = exerciseId, position = 0, progress = "20/4,6-30/4,5")
+        observeState()
+
+        viewModel.removeUnit(exerciseId, index = 1)
+        advanceUntilIdle()
+
+        assertEquals("20-30", planRows(2).single().progress)
+        assertEquals("20", db.exerciseDao().getById(exerciseId)!!.lastProgress)
+        assertEquals("мин", db.exerciseDao().getById(exerciseId)!!.units)
+        assertEquals(PlanMessage.UnitRemoved, viewModel.uiState.value.message)
+    }
+
     private fun TestScope.observeState() {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         viewModel = PlanViewModel(repository, today = { TUESDAY })
@@ -212,10 +261,12 @@ class PlanViewModelTest {
     private suspend fun insertExercise(
         name: String,
         lastProgress: String = "",
+        units: String = "",
     ): Long = db.exerciseDao().insert(
         ExerciseEntity(
             name = name,
             lastProgress = lastProgress,
+            units = units,
             createdAt = T0,
             updatedAt = T0,
         ),

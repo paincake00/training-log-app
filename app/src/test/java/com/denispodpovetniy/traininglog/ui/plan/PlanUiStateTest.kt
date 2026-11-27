@@ -131,6 +131,7 @@ class PlanUiStateTest {
         exerciseId = rowId,
         name = "Упражнение $rowId",
         description = "",
+        units = emptyList(),
         progress = "",
         position = 0,
     )

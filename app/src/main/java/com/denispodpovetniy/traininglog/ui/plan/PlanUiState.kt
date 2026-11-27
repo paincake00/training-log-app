@@ -3,6 +3,7 @@ package com.denispodpovetniy.traininglog.ui.plan
 import com.denispodpovetniy.traininglog.data.entity.ExerciseEntity
 import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
 import com.denispodpovetniy.traininglog.data.relation.PlanExerciseWithExercise
+import com.denispodpovetniy.traininglog.util.ProgressCodec
 
 /** Полное состояние экрана «Недельный план». */
 data class PlanUiState(
@@ -15,6 +16,8 @@ data class PlanUiState(
     val pickerWeekday: Int? = null,
     val pickerQuery: String = "",
     val pickerResults: List<ExerciseEntity> = emptyList(),
+    /** Подсказки единиц: сохранённые пользователем и стартовый список. */
+    val unitSuggestions: List<String> = emptyList(),
     val dialog: PlanDialog? = null,
     val message: PlanMessage? = null,
 )
@@ -38,6 +41,8 @@ data class PlanExerciseUi(
     val exerciseId: Long,
     val name: String,
     val description: String,
+    /** Единицы измерения пресета. */
+    val units: List<String>,
     val progress: String,
     val position: Int,
 )
@@ -56,8 +61,11 @@ sealed interface PlanDialog {
 
     data class EditProgress(
         val planRowId: Long,
+        val exerciseId: Long,
         val progress: String,
     ) : PlanDialog
+
+    data class Units(val exerciseId: Long) : PlanDialog
 
     data class ConfirmDelete(
         val planRowId: Long,
@@ -70,6 +78,7 @@ enum class PlanMessage {
     DuplicateExercise,
     ExerciseNotFound,
     SaveFailed,
+    UnitRemoved,
 }
 
 /**
@@ -96,6 +105,7 @@ fun buildPlanDays(
                         exerciseId = row.exercise.id,
                         name = row.exercise.name,
                         description = row.exercise.description,
+                        units = ProgressCodec.decodeUnits(row.exercise.units),
                         progress = row.planExercise.progress,
                         position = row.planExercise.position,
                     )

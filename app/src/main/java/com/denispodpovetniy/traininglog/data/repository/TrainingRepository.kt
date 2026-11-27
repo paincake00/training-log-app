@@ -69,7 +69,7 @@ class TrainingRepository(private val db: AppDatabase) {
                     unique.putIfAbsent(unit.lowercase(), unit)
                 }
             }
-            unique.values.toList()
+            ProgressCodec.unitSuggestions(unique.values.toList())
         }
 
     /**

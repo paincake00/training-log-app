@@ -234,7 +234,7 @@ class WorkoutViewModelTest {
         assertFalse(viewModel.uiState.value.pickerVisible)
         assertEquals(WorkoutDialog.Create, viewModel.uiState.value.dialog)
 
-        viewModel.saveNewExercise(name = "   ", description = "", progress = "")
+        viewModel.saveNewExercise(name = "   ", description = "", units = emptyList(), progress = "")
         advanceUntilIdle()
 
         assertEquals(WorkoutDialog.Create, viewModel.uiState.value.dialog)
@@ -243,7 +243,7 @@ class WorkoutViewModelTest {
         assertEquals(0, countRows("workout_exercises"))
 
         viewModel.consumeMessage()
-        viewModel.saveNewExercise(name = "  Присед  ", description = "Ноги", progress = " 3/10 ")
+        viewModel.saveNewExercise(name = "  Присед  ", description = "Ноги", units = emptyList(), progress = " 3/10 ")
         advanceUntilIdle()
 
         assertNull(viewModel.uiState.value.dialog)
@@ -531,6 +531,78 @@ class WorkoutViewModelTest {
         )
     }
 
+    // ------------------------------------------------------- единицы и подходы
+
+    @Test
+    fun `units of preset are exposed to ui state`() = runTest {
+        val squat = insertExercise("Присед", units = "повторы\nкг")
+        val workoutId = insertWorkout()
+        insertWorkoutRow(workoutId, squat, position = 0, progress = "5/20")
+        startViewModel(workoutId)
+
+        assertEquals(listOf("повторы", "кг"), viewModel.uiState.value.exercises.single().units)
+    }
+
+    @Test
+    fun `value change autosaves canonical string and keeps other values`() = runTest {
+        val squat = insertExercise("Присед", units = "повторы\nкг")
+        val workoutId = insertWorkout()
+        val rowId = insertWorkoutRow(workoutId, squat, position = 0, progress = "5/20-5/20")
+        startViewModel(workoutId)
+
+        viewModel.onValueChange(rowId, setIndex = 0, valueIndex = 1, value = "22,5")
+        advanceTimeBy(PROGRESS_DEBOUNCE_MS)
+        advanceUntilIdle()
+
+        assertEquals("5/22,5-5/20", db.workoutDao().getExerciseById(rowId)!!.progress)
+    }
+
+    @Test
+    fun `adding a set appends empty set to canonical string`() = runTest {
+        val squat = insertExercise("Присед", units = "повторы\nкг")
+        val workoutId = insertWorkout()
+        val rowId = insertWorkoutRow(workoutId, squat, position = 0, progress = "5/20-5/20")
+        startViewModel(workoutId)
+
+        viewModel.onAddSet(rowId)
+        advanceTimeBy(PROGRESS_DEBOUNCE_MS)
+        advanceUntilIdle()
+
+        assertEquals("5/20-5/20-", db.workoutDao().getExerciseById(rowId)!!.progress)
+    }
+
+    @Test
+    fun `removing a unit strips its values from every set and notifies`() = runTest {
+        val squat = insertExercise("Присед", units = "повторы\nкг", lastProgress = "5/20")
+        val workoutId = insertWorkout()
+        val rowId = insertWorkoutRow(workoutId, squat, position = 0, progress = "5/20-5/20")
+        startViewModel(workoutId)
+
+        currentNow = T_SYNC
+        viewModel.removeUnit(squat, index = 1)
+        advanceUntilIdle()
+
+        assertEquals("5-5", db.workoutDao().getExerciseById(rowId)!!.progress)
+        assertEquals("5", db.exerciseDao().getById(squat)!!.lastProgress)
+        assertEquals("повторы", db.exerciseDao().getById(squat)!!.units)
+        assertEquals(WorkoutMessage.UnitRemoved, viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun `removing a unit keeps unsaved value typed in the editor`() = runTest {
+        val squat = insertExercise("Присед", units = "повторы\nкг")
+        val workoutId = insertWorkout()
+        val rowId = insertWorkoutRow(workoutId, squat, position = 0, progress = "5/20")
+        startViewModel(workoutId)
+
+        viewModel.onValueChange(rowId, setIndex = 0, valueIndex = 0, value = "7")
+        viewModel.removeUnit(squat, index = 1)
+        advanceUntilIdle()
+
+        assertEquals("7", db.workoutDao().getExerciseById(rowId)!!.progress)
+        assertEquals(listOf("повторы"), viewModel.uiState.value.exercises.single().units)
+    }
+
     // ------------------------------------------------------- helpers
 
     private fun TestScope.startViewModel(workoutId: Long) {
@@ -552,11 +624,13 @@ class WorkoutViewModelTest {
         name: String,
         description: String = "",
         lastProgress: String = "",
+        units: String = "",
     ): Long = db.exerciseDao().insert(
         ExerciseEntity(
             name = name,
             description = description,
             lastProgress = lastProgress,
+            units = units,
             createdAt = T_OLD,
             updatedAt = T_OLD,
         ),
@@ -621,6 +695,9 @@ class WorkoutViewModelTest {
 
         /** Время в БД до действий пользователя. */
         const val T_OLD = 500L
+
+        /** Задержка автосохранения прогрессии из ViewModel. */
+        const val PROGRESS_DEBOUNCE_MS = 300L
 
         /** Инъектированное `now` для автосохранения, завершения, reload и переименования. */
         const val T0 = 1_000L

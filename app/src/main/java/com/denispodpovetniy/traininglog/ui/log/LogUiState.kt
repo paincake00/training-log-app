@@ -2,6 +2,7 @@ package com.denispodpovetniy.traininglog.ui.log
 
 import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
 import com.denispodpovetniy.traininglog.data.relation.WorkoutWithExercises
+import com.denispodpovetniy.traininglog.util.ProgressCodec
 import java.time.LocalDate
 
 /** Полное состояние экрана «Лог». */
@@ -30,6 +31,8 @@ data class WorkoutLogUi(
 data class LogExerciseUi(
     val exerciseId: Long,
     val name: String,
+    /** Единицы измерения пресета. */
+    val units: List<String>,
     val progress: String,
     val description: String,
 )
@@ -68,6 +71,7 @@ fun buildLogUiState(
                     LogExerciseUi(
                         exerciseId = exerciseRow.exercise.id,
                         name = exerciseRow.exercise.name,
+                        units = ProgressCodec.decodeUnits(exerciseRow.exercise.units),
                         progress = exerciseRow.workoutExercise.progress,
                         description = exerciseRow.exercise.description,
                     )

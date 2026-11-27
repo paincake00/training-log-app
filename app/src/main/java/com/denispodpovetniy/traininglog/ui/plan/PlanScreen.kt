@@ -59,6 +59,8 @@ import com.denispodpovetniy.traininglog.ui.exercises.CreateExerciseDialog
 import com.denispodpovetniy.traininglog.ui.exercises.EditIdentityDialog
 import com.denispodpovetniy.traininglog.ui.exercises.EditProgressDialog
 import com.denispodpovetniy.traininglog.ui.exercises.ExercisePickerSheet
+import com.denispodpovetniy.traininglog.ui.components.ProgressSummary
+import com.denispodpovetniy.traininglog.ui.components.UnitsEditorDialog
 import java.util.Locale
 import kotlinx.coroutines.launch
 
@@ -83,6 +85,10 @@ fun PlanScreen(
         onOpenCreateFromPicker = viewModel::openCreateFromPicker,
         onOpenEditIdentity = viewModel::openEditIdentity,
         onOpenEditProgress = viewModel::openEditProgress,
+        onOpenUnits = viewModel::openUnits,
+        onAddUnit = viewModel::addUnit,
+        onRenameUnit = viewModel::renameUnit,
+        onRemoveUnit = viewModel::removeUnit,
         onOpenDelete = viewModel::openDelete,
         onDismissDialog = viewModel::dismissDialog,
         onSaveNewExercise = viewModel::saveNewExercise,
@@ -108,9 +114,13 @@ fun PlanContent(
     onOpenCreateFromPicker: () -> Unit,
     onOpenEditIdentity: (PlanExerciseUi) -> Unit,
     onOpenEditProgress: (PlanExerciseUi) -> Unit,
+    onOpenUnits: (PlanExerciseUi) -> Unit,
+    onAddUnit: (exerciseId: Long, name: String) -> Unit,
+    onRenameUnit: (exerciseId: Long, index: Int, name: String) -> Unit,
+    onRemoveUnit: (exerciseId: Long, index: Int) -> Unit,
     onOpenDelete: (PlanExerciseUi) -> Unit,
     onDismissDialog: () -> Unit,
-    onSaveNewExercise: (name: String, description: String, progress: String) -> Unit,
+    onSaveNewExercise: (name: String, description: String, units: List<String>, progress: String) -> Unit,
     onSaveIdentity: (row: PlanExerciseUi, name: String, description: String) -> Unit,
     onSaveProgress: (row: PlanExerciseUi, progress: String) -> Unit,
     onDelete: (PlanExerciseUi) -> Unit,
@@ -155,6 +165,7 @@ fun PlanContent(
                     onAdd = { onOpenPicker(day.weekday) },
                     onEditIdentity = onOpenEditIdentity,
                     onEditProgress = onOpenEditProgress,
+                    onEditUnits = onOpenUnits,
                     onDelete = onOpenDelete,
                     onMove = onMove,
                     onStartOrOpenTodayWorkout = onStartOrOpenTodayWorkout,
@@ -185,6 +196,7 @@ fun PlanContent(
 
     when (val dialog = state.dialog) {
         is PlanDialog.Create -> CreateExerciseDialog(
+            suggestions = state.unitSuggestions,
             onDismiss = onDismissDialog,
             onSave = onSaveNewExercise,
         )
@@ -203,9 +215,24 @@ fun PlanContent(
             val row = allExercises.firstOrNull { it.planRowId == dialog.planRowId }
             EditProgressDialog(
                 initialProgress = dialog.progress,
+                units = row?.units.orEmpty(),
                 onDismiss = onDismissDialog,
                 onSave = { progress -> row?.let { onSaveProgress(it, progress) } },
             )
+        }
+
+        is PlanDialog.Units -> {
+            val row = allExercises.firstOrNull { it.exerciseId == dialog.exerciseId }
+            if (row != null) {
+                UnitsEditorDialog(
+                    units = row.units,
+                    suggestions = state.unitSuggestions,
+                    onAdd = { name -> onAddUnit(row.exerciseId, name) },
+                    onRename = { index, name -> onRenameUnit(row.exerciseId, index, name) },
+                    onRemove = { index -> onRemoveUnit(row.exerciseId, index) },
+                    onDismiss = onDismissDialog,
+                )
+            }
         }
 
         is PlanDialog.ConfirmDelete -> {
@@ -228,6 +255,7 @@ private fun PlanDayCard(
     onAdd: () -> Unit,
     onEditIdentity: (PlanExerciseUi) -> Unit,
     onEditProgress: (PlanExerciseUi) -> Unit,
+    onEditUnits: (PlanExerciseUi) -> Unit,
     onDelete: (PlanExerciseUi) -> Unit,
     onMove: (PlanExerciseUi, Int) -> Unit,
     onStartOrOpenTodayWorkout: () -> Unit,
@@ -281,6 +309,7 @@ private fun PlanDayCard(
                             isLast = index == day.exercises.lastIndex,
                             onEditIdentity = { onEditIdentity(exercise) },
                             onEditProgress = { onEditProgress(exercise) },
+                            onEditUnits = { onEditUnits(exercise) },
                             onMoveUp = { onMove(exercise, -1) },
                             onMoveDown = { onMove(exercise, 1) },
                             onDelete = { onDelete(exercise) },
@@ -367,6 +396,7 @@ private fun PlanExerciseRow(
     isLast: Boolean,
     onEditIdentity: () -> Unit,
     onEditProgress: () -> Unit,
+    onEditUnits: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onDelete: () -> Unit,
@@ -384,15 +414,12 @@ private fun PlanExerciseRow(
                     style = MaterialTheme.typography.titleMedium,
                     color = colors.onSurface,
                 )
-                if (exercise.progress.isNotBlank()) {
+                if (exercise.progress.isNotBlank() || exercise.units.isNotEmpty()) {
                     Spacer(Modifier.size(4.dp))
-                    Text(
-                        text = exercise.progress,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Medium,
-                        ),
-                        color = colors.primary,
+                    ProgressSummary(
+                        units = exercise.units,
+                        progress = exercise.progress,
+                        valueColor = colors.primary,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -414,6 +441,7 @@ private fun PlanExerciseRow(
             canMoveDown = !isLast,
             onEditIdentity = onEditIdentity,
             onEditProgress = onEditProgress,
+            onEditUnits = onEditUnits,
             onMoveUp = onMoveUp,
             onMoveDown = onMoveDown,
             onDelete = onDelete,
@@ -427,6 +455,7 @@ private fun ExerciseActionsMenu(
     canMoveDown: Boolean,
     onEditIdentity: () -> Unit,
     onEditProgress: () -> Unit,
+    onEditUnits: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onDelete: () -> Unit,
@@ -460,6 +489,13 @@ private fun ExerciseActionsMenu(
                 onClick = {
                     expanded = false
                     onEditProgress()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.plan_action_edit_units)) },
+                onClick = {
+                    expanded = false
+                    onEditUnits()
                 },
             )
             DropdownMenuItem(
@@ -525,4 +561,5 @@ private val PlanMessage.textRes: Int
         PlanMessage.DuplicateExercise -> R.string.plan_message_duplicate
         PlanMessage.ExerciseNotFound -> R.string.plan_message_not_found
         PlanMessage.SaveFailed -> R.string.plan_message_save_failed
+        PlanMessage.UnitRemoved -> R.string.workout_message_unit_removed
     }

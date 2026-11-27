@@ -183,7 +183,13 @@ class ExerciseUnitsRepositoryTest {
 
         val suggestions = repository.observeUnitSuggestions().first()
 
-        assertEquals(listOf("КГ", "сек", "шаги"), suggestions)
+        // Сохранённые пользователем единицы идут первыми, затем стартовый список.
+        assertEquals(listOf("КГ", "сек", "шаги"), suggestions.take(3))
+        assertTrue(suggestions.contains("повторы"))
+        assertEquals(
+            suggestions.size,
+            suggestions.distinctBy { it.lowercase() }.size,
+        )
     }
 
     private suspend fun insertExercise(

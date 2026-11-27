@@ -7,6 +7,7 @@ import com.denispodpovetniy.traininglog.data.entity.ExerciseEntity
 import com.denispodpovetniy.traininglog.data.repository.AddResult
 import com.denispodpovetniy.traininglog.data.repository.CreateExerciseResult
 import com.denispodpovetniy.traininglog.data.repository.TrainingRepository
+import com.denispodpovetniy.traininglog.util.ProgressCodec
 import com.denispodpovetniy.traininglog.util.isoWeekday
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicBoolean
@@ -47,6 +48,9 @@ class PlanViewModel(
         .flatMapLatest { query -> repository.searchExercises(query) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    private val unitSuggestions: StateFlow<List<String>> = repository.observeUnitSuggestions()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProgressCodec.BUILT_IN_UNITS)
+
     /** Сегодняшняя тренировка по логу — только id и статус для CTA. */
     private val todayWorkoutState: StateFlow<TodayWorkoutUi?> = repository.observeLog()
         .map { workouts ->
@@ -78,11 +82,13 @@ class PlanViewModel(
         message,
         todayWorkoutState,
         openWorkoutId,
-    ) { state, currentMessage, todayWorkout, workoutToOpen ->
+        unitSuggestions,
+    ) { state, currentMessage, todayWorkout, workoutToOpen, suggestions ->
         state.copy(
             todayWorkout = todayWorkout,
             openWorkoutId = workoutToOpen,
             message = currentMessage,
+            unitSuggestions = suggestions,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -150,8 +156,13 @@ class PlanViewModel(
     fun openEditProgress(row: PlanExerciseUi) {
         dialog.value = PlanDialog.EditProgress(
             planRowId = row.planRowId,
+            exerciseId = row.exerciseId,
             progress = row.progress,
         )
+    }
+
+    fun openUnits(row: PlanExerciseUi) {
+        dialog.value = PlanDialog.Units(row.exerciseId)
     }
 
     fun openDelete(row: PlanExerciseUi) {
@@ -165,10 +176,18 @@ class PlanViewModel(
         dialog.value = null
     }
 
-    fun saveNewExercise(name: String, description: String, progress: String) {
+    fun saveNewExercise(name: String, description: String, units: List<String>, progress: String) {
         val create = dialog.value as? PlanDialog.Create ?: return
         launchMutation {
-            when (repository.createExerciseAndAddToPlan(create.weekday, name, description, progress)) {
+            when (
+                repository.createExerciseAndAddToPlan(
+                    weekday = create.weekday,
+                    name = name,
+                    description = description,
+                    progress = progress,
+                    units = units,
+                )
+            ) {
                 is CreateExerciseResult.Created -> dismissDialog()
                 CreateExerciseResult.InvalidName,
                 CreateExerciseResult.WorkoutNotFound -> message.value = PlanMessage.SaveFailed
@@ -185,6 +204,42 @@ class PlanViewModel(
             }
         }
     }
+
+    fun addUnit(exerciseId: Long, name: String) {
+        launchMutation {
+            val units = unitsOf(exerciseId) ?: return@launchMutation
+            if (!repository.updateExerciseUnits(exerciseId, units + name)) {
+                message.value = PlanMessage.SaveFailed
+            }
+        }
+    }
+
+    fun renameUnit(exerciseId: Long, index: Int, name: String) {
+        launchMutation {
+            val units = unitsOf(exerciseId) ?: return@launchMutation
+            val updated = units.toMutableList().apply { this[index] = name }
+            if (!repository.updateExerciseUnits(exerciseId, updated)) {
+                message.value = PlanMessage.SaveFailed
+            }
+        }
+    }
+
+    fun removeUnit(exerciseId: Long, index: Int) {
+        launchMutation {
+            if (repository.removeExerciseUnit(exerciseId, index)) {
+                message.value = PlanMessage.UnitRemoved
+            } else {
+                message.value = PlanMessage.SaveFailed
+            }
+        }
+    }
+
+    private fun unitsOf(exerciseId: Long): List<String>? =
+        uiState.value.days
+            .asSequence()
+            .flatMap { it.exercises.asSequence() }
+            .firstOrNull { it.exerciseId == exerciseId }
+            ?.units
 
     fun saveProgress(row: PlanExerciseUi, progress: String) {
         launchMutation {

@@ -69,7 +69,13 @@ import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
 import com.denispodpovetniy.traininglog.ui.exercises.CreateExerciseDialog
 import com.denispodpovetniy.traininglog.ui.exercises.EditIdentityDialog
 import com.denispodpovetniy.traininglog.ui.exercises.ExercisePickerSheet
+import com.denispodpovetniy.traininglog.ui.components.ConfirmActionDialog
+import com.denispodpovetniy.traininglog.ui.components.ConfirmRemoveUnitDialog
+import com.denispodpovetniy.traininglog.ui.components.RenameUnitDialog
+import com.denispodpovetniy.traininglog.ui.components.SetsRow
+import com.denispodpovetniy.traininglog.ui.components.UnitsRow
 import com.denispodpovetniy.traininglog.util.DateFormatters
+import com.denispodpovetniy.traininglog.util.ProgressCodec
 import kotlinx.coroutines.launch
 
 @Composable
@@ -89,7 +95,17 @@ fun WorkoutScreen(
     WorkoutContent(
         state = state,
         onRequestBack = viewModel::requestBack,
-        onProgressChange = viewModel::onProgressChange,
+        onValueChange = viewModel::onValueChange,
+        onAddSet = viewModel::onAddSet,
+        onRemoveSet = viewModel::openRemoveSet,
+        onApplyRemoveSet = viewModel::onRemoveSet,
+        onRewriteProgress = viewModel::openRewriteProgress,
+        onApplyRewrite = viewModel::onRewriteProgress,
+        onAddUnit = viewModel::addUnit,
+        onOpenRenameUnit = viewModel::openRenameUnit,
+        onOpenRemoveUnit = viewModel::openRemoveUnit,
+        onRenameUnit = viewModel::renameUnit,
+        onRemoveUnit = viewModel::removeUnit,
         onReload = viewModel::reload,
         onOpenPicker = viewModel::openPicker,
         onClosePicker = viewModel::closePicker,
@@ -126,7 +142,17 @@ fun WorkoutScreen(
 fun WorkoutContent(
     state: WorkoutUiState,
     onRequestBack: () -> Unit,
-    onProgressChange: (rowId: Long, text: String) -> Unit,
+    onValueChange: (rowId: Long, setIndex: Int, valueIndex: Int, value: String) -> Unit,
+    onAddSet: (rowId: Long) -> Unit,
+    onRemoveSet: (rowId: Long, setIndex: Int) -> Unit,
+    onApplyRemoveSet: (rowId: Long, setIndex: Int) -> Unit,
+    onRewriteProgress: (rowId: Long) -> Unit,
+    onApplyRewrite: (rowId: Long) -> Unit,
+    onAddUnit: (exerciseId: Long, name: String) -> Unit,
+    onOpenRenameUnit: (exerciseId: Long, index: Int, currentName: String) -> Unit,
+    onOpenRemoveUnit: (exerciseId: Long, index: Int, unitName: String) -> Unit,
+    onRenameUnit: (exerciseId: Long, index: Int, name: String) -> Unit,
+    onRemoveUnit: (exerciseId: Long, index: Int) -> Unit,
     onReload: (WorkoutExerciseUi) -> Unit,
     onOpenPicker: () -> Unit,
     onClosePicker: () -> Unit,
@@ -136,7 +162,7 @@ fun WorkoutContent(
     onOpenEditIdentity: (WorkoutExerciseUi) -> Unit,
     onOpenDeleteExercise: (WorkoutExerciseUi) -> Unit,
     onDismissDialog: () -> Unit,
-    onSaveNewExercise: (name: String, description: String, progress: String) -> Unit,
+    onSaveNewExercise: (name: String, description: String, units: List<String>, progress: String) -> Unit,
     onSaveIdentity: (row: WorkoutExerciseUi, name: String, description: String) -> Unit,
     onDeleteExercise: (WorkoutExerciseUi) -> Unit,
     onMove: (row: WorkoutExerciseUi, delta: Int) -> Unit,
@@ -245,7 +271,20 @@ fun WorkoutContent(
                             row = row,
                             isFirst = index == 0,
                             isLast = index == state.exercises.lastIndex,
-                            onProgressChange = { text -> onProgressChange(row.rowId, text) },
+                            suggestions = state.unitSuggestions,
+                            onValueChange = { setIndex, valueIndex, value ->
+                                onValueChange(row.rowId, setIndex, valueIndex, value)
+                            },
+                            onAddSet = { onAddSet(row.rowId) },
+                            onOpenRemoveSet = { setIndex -> onRemoveSet(row.rowId, setIndex) },
+                            onRewrite = { onRewriteProgress(row.rowId) },
+                            onAddUnit = { name -> onAddUnit(row.exerciseId, name) },
+                            onOpenRenameUnit = { unitIndex ->
+                                onOpenRenameUnit(row.exerciseId, unitIndex, row.units[unitIndex])
+                            },
+                            onOpenRemoveUnit = { unitIndex ->
+                                onOpenRemoveUnit(row.exerciseId, unitIndex, row.units[unitIndex])
+                            },
                             onReload = { onReload(row) },
                             onEditIdentity = { onOpenEditIdentity(row) },
                             onMoveUp = { onMove(row, -1) },
@@ -288,6 +327,7 @@ fun WorkoutContent(
 
     when (val dialog = state.dialog) {
         is WorkoutDialog.Create -> CreateExerciseDialog(
+            suggestions = state.unitSuggestions,
             onDismiss = onDismissDialog,
             onSave = onSaveNewExercise,
         )
@@ -312,6 +352,47 @@ fun WorkoutContent(
                 onConfirm = { row?.let(onDeleteExercise) },
             )
         }
+
+        is WorkoutDialog.RenameUnit -> {
+            val units = state.exercises
+                .firstOrNull { it.exerciseId == dialog.exerciseId }
+                ?.units
+                .orEmpty()
+            RenameUnitDialog(
+                initialName = dialog.currentName,
+                existingUnits = units,
+                onDismiss = onDismissDialog,
+                onSave = { name -> onRenameUnit(dialog.exerciseId, dialog.index, name) },
+            )
+        }
+
+        is WorkoutDialog.ConfirmRemoveUnit -> ConfirmRemoveUnitDialog(
+            unitName = dialog.unitName,
+            onDismiss = onDismissDialog,
+            onConfirm = { onRemoveUnit(dialog.exerciseId, dialog.index) },
+        )
+
+        is WorkoutDialog.ConfirmRemoveSet -> ConfirmActionDialog(
+            title = stringResource(R.string.sets_delete_title),
+            text = stringResource(R.string.sets_delete_text),
+            confirmText = stringResource(R.string.dialog_delete),
+            onDismiss = onDismissDialog,
+            onConfirm = {
+                onApplyRemoveSet(dialog.rowId, dialog.setIndex)
+                onDismissDialog()
+            },
+        )
+
+        is WorkoutDialog.ConfirmRewriteProgress -> ConfirmActionDialog(
+            title = stringResource(R.string.sets_rewrite_title),
+            text = stringResource(R.string.sets_rewrite_text),
+            confirmText = stringResource(R.string.sets_legacy_rewrite),
+            onDismiss = onDismissDialog,
+            onConfirm = {
+                onApplyRewrite(dialog.rowId)
+                onDismissDialog()
+            },
+        )
 
         WorkoutDialog.ConfirmDeleteWorkout -> ConfirmDeleteWorkoutDialog(
             onDismiss = onDismissDialog,
@@ -445,7 +526,14 @@ private fun WorkoutExerciseCard(
     row: WorkoutExerciseUi,
     isFirst: Boolean,
     isLast: Boolean,
-    onProgressChange: (String) -> Unit,
+    suggestions: List<String>,
+    onValueChange: (setIndex: Int, valueIndex: Int, value: String) -> Unit,
+    onAddSet: () -> Unit,
+    onOpenRemoveSet: (setIndex: Int) -> Unit,
+    onRewrite: () -> Unit,
+    onAddUnit: (String) -> Unit,
+    onOpenRenameUnit: (unitIndex: Int) -> Unit,
+    onOpenRemoveUnit: (unitIndex: Int) -> Unit,
     onReload: () -> Unit,
     onEditIdentity: () -> Unit,
     onMoveUp: () -> Unit,
@@ -502,6 +590,10 @@ private fun WorkoutExerciseCard(
                     text = buildAnnotatedString {
                         append(planLabel)
                         append(" ")
+                        if (row.units.isNotEmpty()) {
+                            append(row.units.joinToString(" / "))
+                            append(" ")
+                        }
                         withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) {
                             append(row.planProgress)
                         }
@@ -513,24 +605,31 @@ private fun WorkoutExerciseCard(
 
             Spacer(Modifier.height(12.dp))
 
+            UnitsRow(
+                units = row.units,
+                suggestions = suggestions,
+                onAdd = onAddUnit,
+                onRename = onOpenRenameUnit,
+                onRemove = onOpenRemoveUnit,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            SetsRow(
+                progress = row.progress,
+                units = row.units,
+                onValueChange = onValueChange,
+                onAddSet = onAddSet,
+                onRemoveSet = onOpenRemoveSet,
+                onRewrite = onRewrite,
+            )
+
+            Spacer(Modifier.height(4.dp))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End,
             ) {
-                OutlinedTextField(
-                    value = row.progress,
-                    onValueChange = onProgressChange,
-                    modifier = Modifier.weight(1f),
-                    label = { Text(stringResource(R.string.workout_progress_label)) },
-                    minLines = 1,
-                    maxLines = 6,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        fontFamily = FontFamily.Monospace,
-                    ),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                )
-
-                Spacer(Modifier.width(8.dp))
                 TextButton(
                     onClick = onReload,
                     enabled = canSyncProgressToPlan(row.progress),
@@ -772,4 +871,5 @@ internal val WorkoutMessage.textRes: Int
         WorkoutMessage.SaveFailed -> R.string.workout_message_save_failed
         WorkoutMessage.SyncedPlanAndPreset -> R.string.workout_message_synced_plan_and_preset
         WorkoutMessage.SyncedPresetOnly -> R.string.workout_message_synced_preset_only
+        WorkoutMessage.UnitRemoved -> R.string.workout_message_unit_removed
     }
