@@ -296,9 +296,9 @@ GIT_CONFIG_GLOBAL=/dev/null npx -y skills add <package> --skill <skill> -y
 
 Текущее состояние на момент передачи:
 
-- MVP готов: лог, недельный план, экран тренировки, пресеты, autosave, reload в план.
-- 100 тестов зелёные, `assembleDebug` и подписанный release собираются.
-- Опубликован `v1.0.0`: <https://github.com/paincake00/training-log-app/releases/tag/v1.0.0>.
-- `main` содержит merge релиза; `release` указывает на тегированный коммит `v1.0.0`.
-- На Pixel 9a установлен подписанный release APK; база приложения пустая после чистой установки.
+- MVP готов: лог, недельный план, экран тренировки, пресеты, autosave, reload в план, единицы измерения и подходы, экспорт и импорт плана файлом JSON.
+- 182 теста зелёные, `assembleDebug` и подписанный release собираются.
+- Опубликован `v1.1.0`: <https://github.com/paincake00/training-log-app/releases/tag/v1.1.0>.
+- `main` содержит merge релиза; `release` указывает на тегированный коммит `v1.1.0`.
+- На Pixel 9a установлен подписанный release APK с пользовательскими данными; debug-сборка удалена.
 - `dist/` и `.env` игнорируются; секретов в репозитории нет.
