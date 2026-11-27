@@ -7,7 +7,8 @@ import androidx.room.PrimaryKey
 /**
  * Глобальный пресет упражнения.
  *
- * Название, описание и [lastProgress] общие для плана и всех тренировок.
+ * Название, описание, единицы измерения и [lastProgress] общие для плана и всех тренировок.
+ * [units] хранится как список названий, разделённых переводом строки (см. `ProgressCodec`).
  */
 @Entity(tableName = "exercises")
 data class ExerciseEntity(
@@ -18,6 +19,8 @@ data class ExerciseEntity(
     val description: String = "",
     @ColumnInfo(defaultValue = "''")
     val lastProgress: String = "",
+    @ColumnInfo(defaultValue = "''")
+    val units: String = "",
     val createdAt: Long,
     val updatedAt: Long,
 )

@@ -24,6 +24,9 @@ interface PlanDao {
     @Query("SELECT * FROM plan_exercises WHERE weekday = :weekday AND exerciseId = :exerciseId")
     suspend fun findByWeekdayAndExercise(weekday: Int, exerciseId: Long): PlanExerciseEntity?
 
+    @Query("SELECT * FROM plan_exercises WHERE exerciseId = :exerciseId")
+    suspend fun getByExercise(exerciseId: Long): List<PlanExerciseEntity>
+
     @Query("SELECT COALESCE(MAX(position), -1) FROM plan_exercises WHERE weekday = :weekday")
     suspend fun maxPosition(weekday: Int): Int
 

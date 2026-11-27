@@ -3,6 +3,7 @@ package com.denispodpovetniy.traininglog
 import android.content.Context
 import androidx.room.Room
 import com.denispodpovetniy.traininglog.data.db.AppDatabase
+import com.denispodpovetniy.traininglog.data.db.Migrations
 import com.denispodpovetniy.traininglog.data.repository.TrainingRepository
 
 /**
@@ -16,7 +17,9 @@ class AppContainer(context: Context) {
         context.applicationContext,
         AppDatabase::class.java,
         AppDatabase.NAME,
-    ).build()
+    )
+        .addMigrations(Migrations.MIGRATION_1_2)
+        .build()
 
     val trainingRepository: TrainingRepository = TrainingRepository(database)
 }

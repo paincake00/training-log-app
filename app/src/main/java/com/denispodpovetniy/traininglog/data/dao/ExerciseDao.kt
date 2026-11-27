@@ -40,4 +40,7 @@ interface ExerciseDao {
         """,
     )
     suspend fun updateLastProgress(id: Long, progress: String, now: Long): Int
+
+    @Query("UPDATE exercises SET units = :units, updatedAt = :now WHERE id = :id")
+    suspend fun updateUnits(id: Long, units: String, now: Long): Int
 }

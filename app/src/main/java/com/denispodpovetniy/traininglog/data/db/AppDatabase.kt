@@ -18,7 +18,7 @@ import com.denispodpovetniy.traininglog.data.entity.WorkoutExerciseEntity
         WorkoutEntity::class,
         WorkoutExerciseEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

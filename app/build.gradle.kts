@@ -54,6 +54,12 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+
+    sourceSets {
+        // Схемы Room нужны MigrationTestHelper в Robolectric-тестах:
+        // Robolectric видит ассеты debug-варианта. В release-APK схемы не попадают.
+        getByName("debug").assets.srcDir("$projectDir/schemas")
+    }
 }
 
 ksp {

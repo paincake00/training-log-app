@@ -10,6 +10,7 @@ import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
 import com.denispodpovetniy.traininglog.data.relation.PlanExerciseWithExercise
 import com.denispodpovetniy.traininglog.data.relation.WorkoutWithExercises
 import com.denispodpovetniy.traininglog.util.ExerciseValidator
+import com.denispodpovetniy.traininglog.util.ProgressCodec
 import com.denispodpovetniy.traininglog.util.isoWeekday
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
@@ -54,6 +55,89 @@ class TrainingRepository(private val db: AppDatabase) {
                 exercises.filter { it.name.contains(needle, ignoreCase = true) }
             }
         }
+    }
+
+    /**
+     * Единицы, которые пользователь уже где-то задавал. Порядок — по последнему
+     * изменению пресета. Стартовые подсказки добавляет `ProgressCodec.unitSuggestions`.
+     */
+    fun observeUnitSuggestions(): Flow<List<String>> =
+        exerciseDao.observeAll().map { exercises ->
+            val unique = LinkedHashMap<String, String>()
+            exercises.forEach { exercise ->
+                ProgressCodec.decodeUnits(exercise.units).forEach { unit ->
+                    unique.putIfAbsent(unit.lowercase(), unit)
+                }
+            }
+            unique.values.toList()
+        }
+
+    /**
+     * Заменяет список единиц пресета.
+     *
+     * Названия обрезаются; пустые, длиннее 20 символов и повторы без учёта регистра
+     * отклоняются целиком, чтобы не потерять часть списка.
+     *
+     * @return `false`, если список не прошёл проверку или пресет не найден.
+     */
+    suspend fun updateExerciseUnits(
+        exerciseId: Long,
+        units: List<String>,
+        now: Long = System.currentTimeMillis(),
+    ): Boolean {
+        val normalized = mutableListOf<String>()
+        units.forEach { raw ->
+            val name = ProgressCodec.normalizeUnit(raw, normalized) ?: return false
+            normalized += name
+        }
+        return exerciseDao.updateUnits(
+            exerciseId,
+            ProgressCodec.encodeUnits(normalized),
+            now,
+        ) > 0
+    }
+
+    /**
+     * Удаляет единицу с позицией [index] и вычищает её значения из всех подходов:
+     * план, все тренировки и `lastProgress`. Одна транзакция.
+     *
+     * @return `false`, если пресета или такой позиции нет.
+     */
+    suspend fun removeExerciseUnit(
+        exerciseId: Long,
+        index: Int,
+        now: Long = System.currentTimeMillis(),
+    ): Boolean = db.withTransaction {
+        val exercise = exerciseDao.getById(exerciseId) ?: return@withTransaction false
+        val units = ProgressCodec.decodeUnits(exercise.units)
+        if (index !in units.indices) return@withTransaction false
+
+        exerciseDao.updateUnits(
+            exerciseId,
+            ProgressCodec.encodeUnits(units.filterIndexed { position, _ -> position != index }),
+            now,
+        )
+
+        val lastProgress = ProgressCodec.removeUnitValues(exercise.lastProgress, index)
+        if (lastProgress != exercise.lastProgress) {
+            exerciseDao.updateLastProgress(exerciseId, lastProgress, now)
+        }
+
+        planDao.getByExercise(exerciseId).forEach { row ->
+            val stripped = ProgressCodec.removeUnitValues(row.progress, index)
+            if (stripped != row.progress) {
+                planDao.updateProgress(row.id, stripped, now)
+            }
+        }
+
+        workoutDao.getExercisesByExercise(exerciseId).forEach { row ->
+            val stripped = ProgressCodec.removeUnitValues(row.progress, index)
+            if (stripped != row.progress) {
+                workoutDao.updateProgress(row.id, stripped, now)
+            }
+        }
+
+        true
     }
 
     /**
@@ -239,6 +323,7 @@ class TrainingRepository(private val db: AppDatabase) {
         name: String,
         description: String,
         progress: String? = null,
+        units: List<String> = emptyList(),
         now: Long = System.currentTimeMillis(),
     ): CreateExerciseResult {
         require(weekday in WEEKDAY_RANGE) { "weekday must be in 1..7" }
@@ -253,6 +338,7 @@ class TrainingRepository(private val db: AppDatabase) {
                     name = normalizedName,
                     description = description,
                     lastProgress = progressValue,
+                    units = ProgressCodec.encodeUnits(normalizeUnits(units)),
                     createdAt = now,
                     updatedAt = now,
                 ),
@@ -277,6 +363,7 @@ class TrainingRepository(private val db: AppDatabase) {
         name: String,
         description: String,
         progress: String? = null,
+        units: List<String> = emptyList(),
         now: Long = System.currentTimeMillis(),
     ): CreateExerciseResult {
         val normalizedName = ExerciseValidator.normalizeName(name)
@@ -293,6 +380,7 @@ class TrainingRepository(private val db: AppDatabase) {
                     name = normalizedName,
                     description = description,
                     lastProgress = progressValue,
+                    units = ProgressCodec.encodeUnits(normalizeUnits(units)),
                     createdAt = now,
                     updatedAt = now,
                 ),
@@ -405,6 +493,15 @@ class TrainingRepository(private val db: AppDatabase) {
         require(orderedIds.size == orderedIds.toSet().size) {
             "orderedIds must not contain duplicates"
         }
+    }
+
+    /** Отбрасывает пустые, слишком длинные и повторяющиеся названия единиц. */
+    private fun normalizeUnits(units: List<String>): List<String> {
+        val normalized = mutableListOf<String>()
+        units.forEach { raw ->
+            ProgressCodec.normalizeUnit(raw, normalized)?.let(normalized::add)
+        }
+        return normalized
     }
 
     private fun WorkoutWithExercises.withSortedExercises(): WorkoutWithExercises =
