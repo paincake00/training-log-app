@@ -24,6 +24,13 @@ interface PlanDao {
     @Query("SELECT * FROM plan_exercises WHERE weekday = :weekday AND exerciseId = :exerciseId")
     suspend fun findByWeekdayAndExercise(weekday: Int, exerciseId: Long): PlanExerciseEntity?
 
+    @Query("SELECT * FROM plan_exercises WHERE exerciseId = :exerciseId")
+    suspend fun getByExercise(exerciseId: Long): List<PlanExerciseEntity>
+
+    /** Весь план без наблюдения: экспорт и импорт файла плана. */
+    @Query("SELECT * FROM plan_exercises ORDER BY weekday ASC, position ASC")
+    suspend fun getAll(): List<PlanExerciseEntity>
+
     @Query("SELECT COALESCE(MAX(position), -1) FROM plan_exercises WHERE weekday = :weekday")
     suspend fun maxPosition(weekday: Int): Int
 
@@ -38,4 +45,8 @@ interface PlanDao {
 
     @Query("DELETE FROM plan_exercises WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    /** Очистка недельного плана перед импортом. Пресеты не затрагиваются. */
+    @Query("DELETE FROM plan_exercises")
+    suspend fun deleteAll()
 }

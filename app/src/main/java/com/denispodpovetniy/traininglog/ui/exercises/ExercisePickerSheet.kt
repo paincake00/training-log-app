@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.denispodpovetniy.traininglog.R
 import com.denispodpovetniy.traininglog.data.entity.ExerciseEntity
+import com.denispodpovetniy.traininglog.util.ProgressCodec
 
 /**
  * Bottom sheet выбора упражнения из справочника пресетов.
@@ -182,6 +183,16 @@ private fun ExercisePickerRow(
             Text(
                 text = exercise.description,
                 style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (exercise.units.isNotBlank() && exercise.lastProgress.isNotBlank()) {
+            Spacer(Modifier.size(2.dp))
+            Text(
+                text = ProgressCodec.decodeUnits(exercise.units).joinToString(" / "),
+                style = MaterialTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

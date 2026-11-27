@@ -259,6 +259,15 @@ private fun LogExerciseRow(exercise: LogExerciseUi) {
             overflow = TextOverflow.Ellipsis,
         )
 
+        if (exercise.units.isNotEmpty() && exercise.progress.isNotBlank()) {
+            Spacer(Modifier.size(4.dp))
+            Text(
+                text = exercise.units.joinToString(" / "),
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onSurfaceVariant,
+            )
+        }
+
         if (exercise.progress.isNotBlank()) {
             Spacer(Modifier.size(4.dp))
             Text(

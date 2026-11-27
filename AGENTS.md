@@ -2,6 +2,16 @@
 
 Этот файл обязателен для любого агента, который меняет код в репозитории.
 
+## 0. Старт новой сессии (обязательно)
+
+Если в начале сессии контекст пустой и ты ещё не прочитал документацию проекта и не проверил состояние репозитория:
+
+1. Прочитай `AGENTS.md`, `PLAN.md`, `DESIGN.md`, `CONTRIBUTING.md`, `README.md`.
+2. Проверь `git status` и последние коммиты (`git log --oneline -5`), текущую ветку.
+3. Продолжай работу с текущего состояния репозитория.
+
+Ограничение: **не очищай данные приложения на телефоне без явного разрешения пользователя.**
+
 ## 1. Источник истины
 
 - `PLAN.md` — что строим, модель данных, поведение, acceptance criteria.
@@ -206,7 +216,7 @@ GIT_CONFIG_GLOBAL=/dev/null npx -y skills add <package> --skill <skill> -y
 
 ## 10. Git и коммиты
 
-Репозиторий локальный, ветка `main`, удалённого remote пока нет. Изменения фиксируем локальными коммитами.
+Репозиторий: <https://github.com/paincake00/training-log-app>. `main` — основная ветка разработки, `release` — долгоживущая релизная ветка. Изменения фиксируем локальными коммитами и отправляем в `origin`.
 
 Правила:
 
@@ -227,3 +237,68 @@ GIT_CONFIG_GLOBAL=/dev/null npx -y skills add <package> --skill <skill> -y
 - Суб-агенты код не коммитят. Коммит делает ведущий агент после проверки diff, тестов и сборки.
 - После завершения этапа рабочее дерево должно быть чистым; не оставляй неотносящиеся к задаче изменения.
 - Если изменение схемы Room требует миграции, миграция, тест миграции и обновлённая схема идут в том же коммите.
+
+---
+
+## 11. Ветки, remote и внешние контрибьюторы
+
+- `main` — интеграционная ветка, все обычные изменения идут сюда.
+- `release` — долгоживущая релизная ветка. Не удалять её после merge и не пушить в неё напрямую.
+- Релиз: PR `main` → `release`, merge, тег `vX.Y.Z` на коммите `release`, GitHub Release с артефактами.
+- Ветка `release` защищена ruleset: нужен PR, approvals, запрещены force-push и удаление. Обходить правила может только владелец.
+- Внешние контрибьюторы не получают доступ к `release` и не добавляются в collaborators. Они форкают репозиторий, делают ветку `feature/...` от `main` своего форка и открывают PR в `paincake00:main`. PR в `release` не принимается.
+- Файл `CONTRIBUTING.md` — публичная инструкция для контрибьюторов; `AGENTS.md` — внутренние правила для агентов.
+
+### Remote и аутентификация
+
+- Remote: `https://github.com/paincake00/training-log-app.git`.
+- SSH в текущем окружении не работает; для push используется HTTPS + PAT из `.env` (файл в `.gitignore`).
+- Глобальный git-конфиг переписывает HTTPS на SSH. Для операций с remote используй `GIT_CONFIG_GLOBAL=/dev/null` и временный `GIT_ASKPASS`, который читает `GITHUB_PERSONAL_ACCESS_TOKEN` из `.env`.
+- Никогда не записывай токен в URL remote, `.git/config`, `opencode.json`, код или документацию.
+- GitHub MCP настроен как remote `https://api.githubcopilot.com/mcp/` с `oauth: false` и заголовком `Authorization: Bearer {env:GITHUB_PERSONAL_ACCESS_TOKEN}`. `{env:...}` читает окружение процесса OpenCode, а не `.env`; для MCP сервис должен быть запущен с переменной из `.env`. Если MCP не подключается, используй GitHub REST API с тем же PAT.
+
+---
+
+## 12. Релизы и подпись
+
+- Версия задаётся в `app/build.gradle.kts`: `versionCode` — целое, `versionName` — SemVer (`1.0.0`).
+- Release keystore: `~/keystores/training-log-release.jks`, пароль: `~/keystores/training-log-release-password.txt`. Оба файла вне репозитория, права `600`. Храни их и не теряй: обновления приложения должны быть подписаны тем же ключом.
+- Для сборки задай:
+  - `TRAINING_LOG_STORE_FILE`
+  - `TRAINING_LOG_STORE_PASSWORD`
+  - `TRAINING_LOG_KEY_ALIAS`
+  - `TRAINING_LOG_KEY_PASSWORD`
+- Команды:
+  ```bash
+  export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+  export ANDROID_HOME="$HOME/Library/Android/sdk"
+  ./gradlew clean testDebugUnitTest assembleRelease bundleRelease
+  ```
+- Проверь подпись:
+  ```bash
+  "$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --verbose --print-certs \
+    app/build/outputs/apk/release/app-release.apk
+  jarsigner -verify app/build/outputs/bundle/release/app-release.aab
+  ```
+- Артефакты складываются в `dist/vX.Y.Z/` (папка в `.gitignore`): APK, AAB, `SHA256SUMS`.
+- Debug- и release-подписи несовместимы. Установка debug поверх release (или наоборот) требует полного удаления пакета и потери данных.
+- Не коммить keystore, пароли, `.env`, `dist/` и подписанные артефакты.
+
+---
+
+## 13. Состояние проекта и передача новой сессии
+
+Порядок старта новой сессии — в §0. Дополнительно перед началом работы:
+
+1. Запусти `./gradlew testDebugUnitTest` и `./gradlew assembleDebug`.
+2. Не очищай данные приложения на подключённом телефоне без явного разрешения пользователя.
+3. После ручных проверок возвращай телефон в тёмную тему.
+
+Текущее состояние на момент передачи:
+
+- MVP готов: лог, недельный план, экран тренировки, пресеты, autosave, reload в план, единицы измерения и подходы, экспорт и импорт плана файлом JSON.
+- 182 теста зелёные, `assembleDebug` и подписанный release собираются.
+- Опубликован `v1.1.0`: <https://github.com/paincake00/training-log-app/releases/tag/v1.1.0>.
+- `main` содержит merge релиза; `release` указывает на тегированный коммит `v1.1.0`.
+- На Pixel 9a установлен подписанный release APK с пользовательскими данными; debug-сборка удалена.
+- `dist/` и `.env` игнорируются; секретов в репозитории нет.

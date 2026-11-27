@@ -57,7 +57,7 @@ class TrainingRepositoryTest {
     // ---------------------------------------------------------------- сценарий 1
 
     @Test
-    fun `scenario 1 - create workout copies plan exercises in order with plan progress`() = runTest {
+    fun `scenario 1 - create workout copies plan exercises in order with empty progress`() = runTest {
         val squat = insertExercise("Присед")
         val bench = insertExercise("Жим")
         val row = insertExercise("Тяга")
@@ -78,12 +78,48 @@ class TrainingRepositoryTest {
         val rows = workoutRows(workoutId)
         assertEquals(listOf(squat, bench, row), rows.map { it.exerciseId })
         assertEquals(listOf(0, 1, 2), rows.map { it.position })
-        assertEquals(listOf("5/20-5/20-5/20", "60-60-60", ""), rows.map { it.progress })
+        // Фактическая прогрессия начинается пустой: план — только подсказка.
+        assertEquals(listOf("", "", ""), rows.map { it.progress })
         assertEquals(listOf(T0, T0, T0), rows.map { it.updatedAt })
+        // Плановая прогрессия остаётся в плане.
+        assertEquals(
+            listOf("5/20-5/20-5/20", "60-60-60", ""),
+            planRows(1).map { it.progress },
+        )
 
         val snapshot = workoutSnapshot(workoutId)!!
         assertEquals(listOf("Присед", "Жим", "Тяга"), snapshot.exercises.map { it.exercise.name })
         assertEquals(listOf(0, 1, 2), snapshot.exercises.map { it.workoutExercise.position })
+    }
+
+    @Test
+    fun `workout rows start empty while plan keeps progress and lastProgress stays unchanged`() = runTest {
+        val exercise = insertExercise(
+            name = "Жим",
+            lastProgress = "старый пресет",
+            units = "кг\nповторы",
+        )
+        val planRowId = addPlanRow(
+            weekday = 1,
+            exerciseId = exercise,
+            position = 0,
+            progress = "5/20-5/20",
+        )
+
+        val workoutId = repository.createWorkoutForDate(MONDAY, now = T0)
+
+        // Строка тренировки: то же упражнение и позиция, но пустая фактическая прогрессия.
+        val workoutRow = workoutRows(workoutId).single()
+        assertEquals(exercise, workoutRow.exerciseId)
+        assertEquals(0, workoutRow.position)
+        assertEquals("", workoutRow.progress)
+        assertEquals(T0, workoutRow.updatedAt)
+
+        // План и пресет не перезаписаны: плановая прогрессия остаётся подсказкой.
+        assertEquals("5/20-5/20", db.planDao().getById(planRowId)!!.progress)
+        val preset = db.exerciseDao().getById(exercise)!!
+        assertEquals("старый пресет", preset.lastProgress)
+        assertEquals("кг\nповторы", preset.units)
     }
 
     // ---------------------------------------------------------------- сценарий 2
@@ -105,7 +141,7 @@ class TrainingRepositoryTest {
 
         val rows = workoutRows(firstId)
         assertEquals(1, rows.size)
-        assertEquals("10-10", rows.single().progress)
+        assertEquals("", rows.single().progress)
         assertEquals(T0, rows.single().updatedAt)
         assertEquals(1, repository.observeLog().first().size)
     }
@@ -175,7 +211,7 @@ class TrainingRepositoryTest {
         assertEquals("пн-план", db.planDao().getById(mondayPlanId)!!.progress)
 
         val mondayRow = workoutRows(mondayWorkoutId).single()
-        assertEquals("пн-план", mondayRow.progress)
+        assertEquals("", mondayRow.progress)
         assertEquals(T0, mondayRow.updatedAt)
 
         assertEquals("вт-факт", db.exerciseDao().getById(exercise)!!.lastProgress)
@@ -216,7 +252,8 @@ class TrainingRepositoryTest {
         val exercise = insertExercise("Присед", lastProgress = "")
         val planRowId = addPlanRow(weekday = 1, exerciseId = exercise, position = 0, progress = "старое")
         val workoutId = repository.createWorkoutForDate(MONDAY, now = T0)
-        assertEquals("старое", workoutRows(workoutId).single().progress)
+        // Тренировка начинается с пустой прогрессии, план — только подсказка.
+        assertEquals("", workoutRows(workoutId).single().progress)
 
         repository.updatePlanProgress(planRowId, " 5/20-5/20 ", now = T1)
 
@@ -229,7 +266,7 @@ class TrainingRepositoryTest {
         assertEquals(T1, preset.updatedAt)
 
         // Изменение плана не переписывает уже существующую тренировку.
-        assertEquals("старое", workoutRows(workoutId).single().progress)
+        assertEquals("", workoutRows(workoutId).single().progress)
         assertEquals(T0, workoutRows(workoutId).single().updatedAt)
     }
 
@@ -276,10 +313,10 @@ class TrainingRepositoryTest {
             assertEquals("Новое\nописание  ", entry.exercises.single().exercise.description)
         }
 
-        // Название/описание общие, но прогрессии не меняются.
+        // Название/описание общие для всех тренировок, прогрессии не меняются.
         assertEquals("5", planEntry.planExercise.progress)
-        assertEquals("5", monday.exercises.single().workoutExercise.progress)
-        assertEquals("6", tuesday.exercises.single().workoutExercise.progress)
+        assertEquals("", monday.exercises.single().workoutExercise.progress)
+        assertEquals("", tuesday.exercises.single().workoutExercise.progress)
         assertEquals("5", db.exerciseDao().getById(exercise)!!.lastProgress)
     }
 
@@ -409,7 +446,8 @@ class TrainingRepositoryTest {
 
         val historyRow = workoutRows(workoutId).single()
         assertEquals(exercise, historyRow.exerciseId)
-        assertEquals("5", historyRow.progress)
+        // История строки сохраняется; плановая прогрессия в тренировку не копировалась.
+        assertEquals("", historyRow.progress)
         assertEquals("5", db.exerciseDao().getById(exercise)!!.lastProgress)
     }
 
@@ -514,7 +552,7 @@ class TrainingRepositoryTest {
         val reordered = workoutRows(workoutId)
         assertEquals(listOf(second.id, third.id, first.id), reordered.map { it.id })
         assertEquals(listOf(0, 1, 2), reordered.map { it.position })
-        assertEquals(listOf("б", "в", "а"), reordered.map { it.progress })
+        assertEquals(listOf("", "", ""), reordered.map { it.progress })
 
         val snapshot = workoutSnapshot(workoutId)!!
         assertEquals(
@@ -811,7 +849,8 @@ class TrainingRepositoryTest {
 
         val workoutId = repository.createWorkoutForDate(MONDAY, now = T1)
         val workoutRow = workoutRows(workoutId).single()
-        assertEquals(progress, workoutRow.progress)
+        // Тренировка стартует пустой, плановая прогрессия остаётся подсказкой.
+        assertEquals("", workoutRow.progress)
         assertEquals(description, workoutSnapshot(workoutId)!!.exercises.single().exercise.description)
 
         val typedProgress = " 5/20-5/20-5/0 "
@@ -872,7 +911,7 @@ class TrainingRepositoryTest {
         val after = workoutRows(workoutId)
         assertEquals(listOf(first, third), after.map { it.exerciseId })
         assertEquals(listOf(0, 1), after.map { it.position })
-        assertEquals(listOf("план-а", "план-в"), after.map { it.progress })
+        assertEquals(listOf("", ""), after.map { it.progress })
 
         val plan = planRows(1)
         assertEquals(3, plan.size)
@@ -972,12 +1011,14 @@ class TrainingRepositoryTest {
         name: String,
         description: String = "",
         lastProgress: String = "",
+        units: String = "",
         now: Long = T0,
     ): Long = db.exerciseDao().insert(
         ExerciseEntity(
             name = name,
             description = description,
             lastProgress = lastProgress,
+            units = units,
             createdAt = now,
             updatedAt = now,
         ),

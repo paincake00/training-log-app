@@ -1,5 +1,7 @@
 package com.denispodpovetniy.traininglog.data.repository
 
+import com.denispodpovetniy.traininglog.util.PlanFileException
+
 /** Результат ручной синхронизации фактической прогрессии в план и пресет. */
 sealed interface SyncResult {
 
@@ -33,4 +35,19 @@ sealed interface CreateExerciseResult {
     data object InvalidName : CreateExerciseResult
 
     data object WorkoutNotFound : CreateExerciseResult
+}
+
+/** Сводка импорта плана: сколько пресетов добавлено, обновлено и сколько строк плана. */
+data class PlanImportSummary(
+    val addedExercises: Int,
+    val updatedExercises: Int,
+    val planRows: Int,
+)
+
+/** Результат импорта файла плана (см. `PLAN.md` §3.10). */
+sealed interface ImportPlanResult {
+
+    data class Imported(val summary: PlanImportSummary) : ImportPlanResult
+
+    data class Rejected(val reason: PlanFileException.Reason) : ImportPlanResult
 }

@@ -25,6 +25,7 @@
     <string name="plan_exercise_actions">Действия с упражнением</string>
     <string name="plan_action_edit_identity">Изменить название и описание</string>
     <string name="plan_action_edit_progress">Изменить прогрессию</string>
+    <string name="plan_action_edit_units">Единицы измерения</string>
     <string name="plan_action_move_up">Переместить выше</string>
     <string name="plan_action_move_down">Переместить ниже</string>
     <string name="plan_action_delete">Удалить из дня</string>
@@ -66,6 +67,7 @@
     <string name="dialog_identity_warning">Название и описание общие для всех тренировок. Изменения применятся везде.</string>
     <string name="dialog_cancel">Отмена</string>
     <string name="dialog_save">Сохранить</string>
+    <string name="dialog_done">Готово</string>
     <string name="dialog_add">Добавить</string>
     <string name="dialog_delete_confirm_title">Удалить упражнение?</string>
     <string name="dialog_delete_confirm_text">Упражнение будет удалено только из этого дня плана.</string>
@@ -104,4 +106,46 @@
     <string name="workout_delete_exercise_text_no_name">Упражнение будет удалено только из этой тренировки.</string>
     <string name="workout_delete_workout_title">Удалить тренировку?</string>
     <string name="workout_delete_workout_text">Тренировка будет удалена вместе с упражнениями. Пресеты и план останутся.</string>
+
+    <string name="units_label">Единицы</string>
+    <string name="units_add">Добавить единицу</string>
+    <string name="units_add_cancel">Закрыть добавление единицы</string>
+    <string name="units_empty">Единицы не заданы</string>
+    <string name="units_hint">Единицы общие для всех тренировок. Изменения применятся везде.</string>
+    <string name="units_name_label">Название единицы</string>
+    <string name="units_name_duplicate">Такая единица уже есть</string>
+    <string name="units_name_invalid">Название должно быть от 1 до 20 символов</string>
+    <string name="units_confirm">Добавить</string>
+    <string name="unit_action_rename">Переименовать</string>
+    <string name="unit_action_delete">Удалить</string>
+    <string name="unit_rename_title">Переименовать единицу</string>
+    <string name="unit_delete_title">Удалить единицу «%1$s»?</string>
+    <string name="unit_delete_text">Значения этой позиции исчезнут из всех подходов упражнения.</string>
+
+    <string name="sets_label">Подходы</string>
+    <string name="sets_add">Добавить подход</string>
+    <string name="sets_delete">Удалить подход</string>
+    <string name="sets_delete_title">Удалить подход?</string>
+    <string name="sets_delete_text">Подход будет удалён из этой прогрессии.</string>
+    <string name="sets_legacy_hint">Значений больше, чем единиц</string>
+    <string name="sets_legacy_rewrite">Переписать</string>
+    <string name="sets_rewrite_title">Переписать прогрессию?</string>
+    <string name="sets_rewrite_text">Старый текст будет удалён, прогрессия начнётся с пустых подходов.</string>
+
+    <string name="workout_message_unit_removed">Значения этой единицы удалены из всех подходов</string>
+
+    <string name="plan_menu_actions">Действия с планом</string>
+    <string name="plan_action_export">Экспорт плана</string>
+    <string name="plan_action_import">Импорт плана</string>
+    <string name="plan_export_saved">План сохранён в файл</string>
+    <string name="plan_export_failed">Не удалось подготовить файл</string>
+    <string name="plan_import_title">Импортировать план?</string>
+    <string name="plan_import_text">Текущий план будет заменён. Тренировки не изменятся.</string>
+    <string name="plan_import_summary">Новых пресетов: %1$d\nОбновятся: %2$d\nСтрок плана: %3$d</string>
+    <string name="plan_import_confirm">Импортировать</string>
+    <string name="plan_import_done">План импортирован: пресетов +%1$d, обновлено %2$d, строк плана %3$d</string>
+    <string name="plan_import_corrupt">Файл повреждён</string>
+    <string name="plan_import_version">Неподдерживаемая версия файла</string>
+    <string name="plan_import_invalid">В файле есть недопустимые данные</string>
+    <string name="plan_import_too_large">Файл слишком большой</string>
 </resources>

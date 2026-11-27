@@ -15,8 +15,8 @@ android {
         applicationId = "com.denispodpovetniy.traininglog"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     signingConfigs {
@@ -32,6 +32,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Отдельный applicationId, чтобы debug-сборка ставилась рядом
+            // с подписанным release и не требовала удаления данных.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")
@@ -49,10 +55,17 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+    }
+
+    sourceSets {
+        // Схемы Room нужны MigrationTestHelper в Robolectric-тестах:
+        // Robolectric видит ассеты debug-варианта. В release-APK схемы не попадают.
+        getByName("debug").assets.srcDir("$projectDir/schemas")
     }
 }
 

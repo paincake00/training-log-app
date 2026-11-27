@@ -8,7 +8,13 @@ import com.denispodpovetniy.traininglog.data.entity.ExerciseEntity
 import com.denispodpovetniy.traininglog.data.entity.PlanExerciseEntity
 import com.denispodpovetniy.traininglog.data.entity.WorkoutExerciseEntity
 import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
+import com.denispodpovetniy.traininglog.data.repository.PlanImportSummary
 import com.denispodpovetniy.traininglog.data.repository.TrainingRepository
+import com.denispodpovetniy.traininglog.util.PlanFile
+import com.denispodpovetniy.traininglog.util.PlanFileCodec
+import com.denispodpovetniy.traininglog.util.PlanFileException
+import com.denispodpovetniy.traininglog.util.PlanFileExercise
+import com.denispodpovetniy.traininglog.util.PlanFileRow
 import java.time.LocalDate
 import java.util.concurrent.Executor
 import kotlinx.coroutines.CoroutineStart
@@ -25,6 +31,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -100,14 +107,14 @@ class PlanViewModelTest {
         assertEquals(PlanDialog.Create(1), viewModel.uiState.value.dialog)
         assertNull(viewModel.uiState.value.pickerWeekday)
 
-        viewModel.saveNewExercise(name = " ", description = "", progress = "")
+        viewModel.saveNewExercise(name = " ", description = "", units = emptyList(), progress = "")
         advanceUntilIdle()
 
         assertEquals(PlanDialog.Create(1), viewModel.uiState.value.dialog)
         assertEquals(PlanMessage.SaveFailed, viewModel.uiState.value.message)
         assertEquals(0, countRows("exercises"))
 
-        viewModel.saveNewExercise(name = "Присед", description = "Ноги", progress = "3/10")
+        viewModel.saveNewExercise(name = "Присед", description = "Ноги", units = emptyList(), progress = "3/10")
         advanceUntilIdle()
 
         assertNull(viewModel.uiState.value.dialog)
@@ -125,8 +132,8 @@ class PlanViewModelTest {
 
         // Оба вызова происходят до запуска первой операции:
         // второй должен быть отброшен защитой mutationInFlight.
-        viewModel.saveNewExercise(name = "Присед", description = "", progress = "3/10")
-        viewModel.saveNewExercise(name = "Присед", description = "", progress = "3/10")
+        viewModel.saveNewExercise(name = "Присед", description = "", units = emptyList(), progress = "3/10")
+        viewModel.saveNewExercise(name = "Присед", description = "", units = emptyList(), progress = "3/10")
         advanceUntilIdle()
 
         assertEquals(1, countRows("exercises"))
@@ -168,10 +175,10 @@ class PlanViewModelTest {
         assertEquals(1, countRows("workouts"))
         assertEquals(workoutId, viewModel.uiState.value.todayWorkout?.workoutId)
         assertEquals(WorkoutStatus.IN_PROGRESS, viewModel.uiState.value.todayWorkout?.status)
-        // Упражнения скопированы из плана вторника с плановой прогрессией.
+        // Упражнения скопированы из плана вторника, фактическая прогрессия пустая.
         val rows = workoutRows(workoutId!!)
         assertEquals(listOf(exerciseId), rows.map { it.exerciseId })
-        assertEquals(listOf("5/20"), rows.map { it.progress })
+        assertEquals(listOf(""), rows.map { it.progress })
 
         viewModel.consumeOpenWorkout()
         advanceUntilIdle()
@@ -200,6 +207,182 @@ class PlanViewModelTest {
         assertEquals(workoutId, viewModel.uiState.value.todayWorkout?.workoutId)
     }
 
+    // ------------------------------------------------------- единицы измерения
+
+    @Test
+    fun `rename unit updates preset and keeps plan progress`() = runTest {
+        val exerciseId = insertExercise("Ходьба", lastProgress = "20/4,6", units = "мин\nкм/ч")
+        addPlanRow(weekday = 2, exerciseId = exerciseId, position = 0, progress = "20/4,6-30/4,5")
+        observeState()
+
+        viewModel.renameUnit(exerciseId, index = 1, name = "скорость")
+        advanceUntilIdle()
+
+        assertEquals("мин\nскорость", db.exerciseDao().getById(exerciseId)!!.units)
+        assertEquals("20/4,6-30/4,5", planRows(2).single().progress)
+        assertEquals(
+            listOf("мин", "скорость"),
+            viewModel.uiState.value.days.first { it.weekday == 2 }.exercises.single().units,
+        )
+    }
+
+    @Test
+    fun `add unit appends it to preset and suggestions without touching progress`() = runTest {
+        val exerciseId = insertExercise("Ходьба", units = "мин")
+        addPlanRow(weekday = 2, exerciseId = exerciseId, position = 0, progress = "20-30")
+        observeState()
+
+        viewModel.addUnit(exerciseId, "наклон")
+        advanceUntilIdle()
+
+        assertEquals("мин\nнаклон", db.exerciseDao().getById(exerciseId)!!.units)
+        assertEquals("20-30", planRows(2).single().progress)
+        assertTrue(viewModel.uiState.value.unitSuggestions.contains("наклон"))
+    }
+
+    @Test
+    fun `remove unit strips values from plan rows and last progress`() = runTest {
+        val exerciseId = insertExercise("Ходьба", lastProgress = "20/4,6", units = "мин\nкм/ч")
+        addPlanRow(weekday = 2, exerciseId = exerciseId, position = 0, progress = "20/4,6-30/4,5")
+        observeState()
+
+        viewModel.removeUnit(exerciseId, index = 1)
+        advanceUntilIdle()
+
+        assertEquals("20-30", planRows(2).single().progress)
+        assertEquals("20", db.exerciseDao().getById(exerciseId)!!.lastProgress)
+        assertEquals("мин", db.exerciseDao().getById(exerciseId)!!.units)
+        assertEquals(PlanMessage.UnitRemoved, viewModel.uiState.value.message)
+    }
+
+    // --------------------------------------------------- экспорт и импорт плана
+
+    @Test
+    fun `export request carries file name and preset snapshot`() = runTest {
+        val exerciseId = insertExercise("Присед", lastProgress = "5/20", units = "повторы\nкг")
+        addPlanRow(weekday = 1, exerciseId = exerciseId, position = 0, progress = "5/20")
+        observeState()
+
+        viewModel.requestExport(appVersion = "1.0.0")
+        advanceUntilIdle()
+
+        val request = requireNotNull(viewModel.uiState.value.exportRequest)
+        assertEquals("training-log-plan-2026-11-24.json", request.fileName)
+        val file = PlanFileCodec.decode(request.content)
+        assertEquals("1.0.0", file.appVersion)
+        assertEquals(listOf("Присед"), file.exercises.map { it.name })
+        assertEquals(listOf("повторы", "кг"), file.exercises.single().units)
+        assertEquals(listOf(1 to "присед"), file.plan.map { it.weekday to it.exerciseKey })
+
+        viewModel.onExportFinished(written = true)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.exportRequest)
+        assertEquals(PlanMessage.Exported, viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun `cancelled export clears request without message`() = runTest {
+        insertExercise("Присед")
+        observeState()
+
+        viewModel.requestExport(appVersion = "1.0.0")
+        advanceUntilIdle()
+        viewModel.onExportFinished(written = false)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.exportRequest)
+        assertNull(viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun `invalid file shows import error and no preview`() = runTest {
+        observeState()
+
+        viewModel.importFromFile("{oops")
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.dialog)
+        assertEquals(PlanMessage.ImportFailed(PlanFileException.Reason.CORRUPT), viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun `import shows preview then replaces plan after confirmation`() = runTest {
+        val old = insertExercise("Старое", lastProgress = "старое")
+        addPlanRow(weekday = 7, exerciseId = old, position = 0, progress = "старое")
+        observeState()
+
+        val content = PlanFileCodec.encode(
+            PlanFile(
+                formatVersion = PlanFileCodec.FORMAT_VERSION,
+                exportedAt = "2026-11-27T18:40:00Z",
+                appVersion = "1.0.0",
+                exercises = listOf(
+                    PlanFileExercise(
+                        key = "присед",
+                        name = "Присед",
+                        description = "Спина прямая",
+                        units = listOf("повторы"),
+                        lastProgress = "5/20-5/20",
+                    ),
+                ),
+                plan = listOf(
+                    PlanFileRow(weekday = 2, position = 0, exerciseKey = "присед", progress = "5/20-5/20"),
+                ),
+            ),
+        )
+
+        viewModel.importFromFile(content)
+        advanceUntilIdle()
+
+        assertEquals(
+            PlanDialog.ConfirmImport(PlanImportSummary(addedExercises = 1, updatedExercises = 0, planRows = 1)),
+            viewModel.uiState.value.dialog,
+        )
+        // До подтверждения ничего не меняется.
+        assertEquals(1, planRows(7).size)
+        assertEquals(1, countRows("exercises"))
+
+        viewModel.confirmImport()
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.dialog)
+        assertEquals(
+            PlanMessage.Imported(PlanImportSummary(addedExercises = 1, updatedExercises = 0, planRows = 1)),
+            viewModel.uiState.value.message,
+        )
+        assertTrue(planRows(7).isEmpty())
+        val rows = planRows(2)
+        assertEquals(listOf("5/20-5/20"), rows.map { it.progress })
+        // Пресет не удалён, новый добавлен.
+        assertEquals(setOf("Старое", "Присед"), db.exerciseDao().getAll().map { it.name }.toSet())
+    }
+
+    @Test
+    fun `dismissing preview keeps plan and data unchanged`() = runTest {
+        val old = insertExercise("Старое", lastProgress = "старое")
+        addPlanRow(weekday = 7, exerciseId = old, position = 0, progress = "старое")
+        observeState()
+
+        viewModel.importFromFile(
+            PlanFileCodec.encode(
+                PlanFile(
+                    formatVersion = PlanFileCodec.FORMAT_VERSION,
+                    exportedAt = "",
+                    appVersion = "",
+                    exercises = emptyList(),
+                    plan = emptyList(),
+                ),
+            ),
+        )
+        advanceUntilIdle()
+        viewModel.dismissDialog()
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.dialog)
+        assertEquals(1, planRows(7).size)
+    }
+
     private fun TestScope.observeState() {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         viewModel = PlanViewModel(repository, today = { TUESDAY })
@@ -212,10 +395,12 @@ class PlanViewModelTest {
     private suspend fun insertExercise(
         name: String,
         lastProgress: String = "",
+        units: String = "",
     ): Long = db.exerciseDao().insert(
         ExerciseEntity(
             name = name,
             lastProgress = lastProgress,
+            units = units,
             createdAt = T0,
             updatedAt = T0,
         ),

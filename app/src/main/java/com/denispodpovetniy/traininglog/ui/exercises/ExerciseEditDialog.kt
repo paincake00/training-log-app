@@ -18,6 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.denispodpovetniy.traininglog.R
+import com.denispodpovetniy.traininglog.ui.components.EditorDialog
+import com.denispodpovetniy.traininglog.ui.components.SetsRow
+import com.denispodpovetniy.traininglog.util.ProgressCodec
 
 /**
  * Диалог редактирования названия и описания пресета.
@@ -85,29 +88,40 @@ fun EditIdentityDialog(
 @Composable
 fun EditProgressDialog(
     initialProgress: String,
+    units: List<String>,
     onDismiss: () -> Unit,
     onSave: (progress: String) -> Unit,
 ) {
     var progress by rememberSaveable { mutableStateOf(initialProgress) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.dialog_progress_title)) },
-        text = {
-            ProgressField(
-                value = progress,
-                onValueChange = { progress = it },
+    EditorDialog(
+        title = stringResource(R.string.dialog_progress_title),
+        onDismiss = onDismiss,
+        confirmLabel = stringResource(R.string.dialog_save),
+        onConfirm = { onSave(progress) },
+    ) {
+        if (units.isNotEmpty()) {
+            Text(
+                text = units.joinToString(" / "),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(progress) }) {
-                Text(stringResource(R.string.dialog_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.dialog_cancel))
-            }
-        },
-    )
+        }
+        SetsRow(
+            progress = progress,
+            units = units,
+            onValueChange = { setIndex, valueIndex, value ->
+                progress = ProgressCodec.withValue(
+                    raw = progress,
+                    unitCount = units.size,
+                    setIndex = setIndex,
+                    valueIndex = valueIndex,
+                    value = ProgressCodec.sanitizeValue(value),
+                )
+            },
+            onAddSet = { progress = ProgressCodec.addSet(progress, units.size) },
+            onRemoveSet = { index -> progress = ProgressCodec.removeSet(progress, index) },
+            onRewrite = { progress = "" },
+        )
+    }
 }
