@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -28,6 +29,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.denispodpovetniy.traininglog.R
 import com.denispodpovetniy.traininglog.ui.log.LogScreen
+import com.denispodpovetniy.traininglog.ui.plan.PlanActionsMenu
+import com.denispodpovetniy.traininglog.ui.plan.PlanActionsState
 import com.denispodpovetniy.traininglog.ui.plan.PlanScreen
 import com.denispodpovetniy.traininglog.ui.workout.WorkoutScreen
 
@@ -39,11 +42,19 @@ fun AppNavHost() {
     val currentRoute = backStackEntry?.destination?.route
     val isWorkout = currentRoute == Routes.WORKOUT
     val currentTab = AppTab.fromRoute(currentRoute) ?: AppTab.START
+    val planActions = remember { PlanActionsState() }
 
     Scaffold(
         topBar = {
             if (!isWorkout) {
-                TopAppBar(title = { Text(stringResource(currentTab.titleRes)) })
+                TopAppBar(
+                    title = { Text(stringResource(currentTab.titleRes)) },
+                    actions = {
+                        if (currentTab == AppTab.PLAN && planActions.isReady) {
+                            PlanActionsMenu(planActions)
+                        }
+                    },
+                )
             }
         },
         bottomBar = {
@@ -111,6 +122,7 @@ fun AppNavHost() {
                 popExitTransition = { ExitTransition.None },
             ) {
                 PlanScreen(
+                    planActions = planActions,
                     onOpenWorkout = { workoutId ->
                         navController.navigate(Routes.workout(workoutId))
                     },

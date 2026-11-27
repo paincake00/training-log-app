@@ -8,7 +8,13 @@ import com.denispodpovetniy.traininglog.data.entity.ExerciseEntity
 import com.denispodpovetniy.traininglog.data.entity.PlanExerciseEntity
 import com.denispodpovetniy.traininglog.data.entity.WorkoutExerciseEntity
 import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
+import com.denispodpovetniy.traininglog.data.repository.PlanImportSummary
 import com.denispodpovetniy.traininglog.data.repository.TrainingRepository
+import com.denispodpovetniy.traininglog.util.PlanFile
+import com.denispodpovetniy.traininglog.util.PlanFileCodec
+import com.denispodpovetniy.traininglog.util.PlanFileException
+import com.denispodpovetniy.traininglog.util.PlanFileExercise
+import com.denispodpovetniy.traininglog.util.PlanFileRow
 import java.time.LocalDate
 import java.util.concurrent.Executor
 import kotlinx.coroutines.CoroutineStart
@@ -247,6 +253,134 @@ class PlanViewModelTest {
         assertEquals("20", db.exerciseDao().getById(exerciseId)!!.lastProgress)
         assertEquals("мин", db.exerciseDao().getById(exerciseId)!!.units)
         assertEquals(PlanMessage.UnitRemoved, viewModel.uiState.value.message)
+    }
+
+    // --------------------------------------------------- экспорт и импорт плана
+
+    @Test
+    fun `export request carries file name and preset snapshot`() = runTest {
+        val exerciseId = insertExercise("Присед", lastProgress = "5/20", units = "повторы\nкг")
+        addPlanRow(weekday = 1, exerciseId = exerciseId, position = 0, progress = "5/20")
+        observeState()
+
+        viewModel.requestExport(appVersion = "1.0.0")
+        advanceUntilIdle()
+
+        val request = requireNotNull(viewModel.uiState.value.exportRequest)
+        assertEquals("training-log-plan-2026-11-24.json", request.fileName)
+        val file = PlanFileCodec.decode(request.content)
+        assertEquals("1.0.0", file.appVersion)
+        assertEquals(listOf("Присед"), file.exercises.map { it.name })
+        assertEquals(listOf("повторы", "кг"), file.exercises.single().units)
+        assertEquals(listOf(1 to "присед"), file.plan.map { it.weekday to it.exerciseKey })
+
+        viewModel.onExportFinished(written = true)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.exportRequest)
+        assertEquals(PlanMessage.Exported, viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun `cancelled export clears request without message`() = runTest {
+        insertExercise("Присед")
+        observeState()
+
+        viewModel.requestExport(appVersion = "1.0.0")
+        advanceUntilIdle()
+        viewModel.onExportFinished(written = false)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.exportRequest)
+        assertNull(viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun `invalid file shows import error and no preview`() = runTest {
+        observeState()
+
+        viewModel.importFromFile("{oops")
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.dialog)
+        assertEquals(PlanMessage.ImportFailed(PlanFileException.Reason.CORRUPT), viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun `import shows preview then replaces plan after confirmation`() = runTest {
+        val old = insertExercise("Старое", lastProgress = "старое")
+        addPlanRow(weekday = 7, exerciseId = old, position = 0, progress = "старое")
+        observeState()
+
+        val content = PlanFileCodec.encode(
+            PlanFile(
+                formatVersion = PlanFileCodec.FORMAT_VERSION,
+                exportedAt = "2026-11-27T18:40:00Z",
+                appVersion = "1.0.0",
+                exercises = listOf(
+                    PlanFileExercise(
+                        key = "присед",
+                        name = "Присед",
+                        description = "Спина прямая",
+                        units = listOf("повторы"),
+                        lastProgress = "5/20-5/20",
+                    ),
+                ),
+                plan = listOf(
+                    PlanFileRow(weekday = 2, position = 0, exerciseKey = "присед", progress = "5/20-5/20"),
+                ),
+            ),
+        )
+
+        viewModel.importFromFile(content)
+        advanceUntilIdle()
+
+        assertEquals(
+            PlanDialog.ConfirmImport(PlanImportSummary(addedExercises = 1, updatedExercises = 0, planRows = 1)),
+            viewModel.uiState.value.dialog,
+        )
+        // До подтверждения ничего не меняется.
+        assertEquals(1, planRows(7).size)
+        assertEquals(1, countRows("exercises"))
+
+        viewModel.confirmImport()
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.dialog)
+        assertEquals(
+            PlanMessage.Imported(PlanImportSummary(addedExercises = 1, updatedExercises = 0, planRows = 1)),
+            viewModel.uiState.value.message,
+        )
+        assertTrue(planRows(7).isEmpty())
+        val rows = planRows(2)
+        assertEquals(listOf("5/20-5/20"), rows.map { it.progress })
+        // Пресет не удалён, новый добавлен.
+        assertEquals(setOf("Старое", "Присед"), db.exerciseDao().getAll().map { it.name }.toSet())
+    }
+
+    @Test
+    fun `dismissing preview keeps plan and data unchanged`() = runTest {
+        val old = insertExercise("Старое", lastProgress = "старое")
+        addPlanRow(weekday = 7, exerciseId = old, position = 0, progress = "старое")
+        observeState()
+
+        viewModel.importFromFile(
+            PlanFileCodec.encode(
+                PlanFile(
+                    formatVersion = PlanFileCodec.FORMAT_VERSION,
+                    exportedAt = "",
+                    appVersion = "",
+                    exercises = emptyList(),
+                    plan = emptyList(),
+                ),
+            ),
+        )
+        advanceUntilIdle()
+        viewModel.dismissDialog()
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.dialog)
+        assertEquals(1, planRows(7).size)
     }
 
     private fun TestScope.observeState() {

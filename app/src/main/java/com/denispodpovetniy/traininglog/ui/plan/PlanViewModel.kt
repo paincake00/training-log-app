@@ -6,7 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.denispodpovetniy.traininglog.data.entity.ExerciseEntity
 import com.denispodpovetniy.traininglog.data.repository.AddResult
 import com.denispodpovetniy.traininglog.data.repository.CreateExerciseResult
+import com.denispodpovetniy.traininglog.data.repository.ImportPlanResult
 import com.denispodpovetniy.traininglog.data.repository.TrainingRepository
+import com.denispodpovetniy.traininglog.util.PlanFile
+import com.denispodpovetniy.traininglog.util.PlanFileCodec
+import com.denispodpovetniy.traininglog.util.PlanFileException
 import com.denispodpovetniy.traininglog.util.ProgressCodec
 import com.denispodpovetniy.traininglog.util.isoWeekday
 import java.time.LocalDate
@@ -41,6 +45,8 @@ class PlanViewModel(
     private val dialog = MutableStateFlow<PlanDialog?>(null)
     private val message = MutableStateFlow<PlanMessage?>(null)
     private val openWorkoutId = MutableStateFlow<Long?>(null)
+    private val exportRequest = MutableStateFlow<PlanExportRequest?>(null)
+    private val pendingImport = MutableStateFlow<PlanFile?>(null)
     private val mutationInFlight = AtomicBoolean(false)
 
     private val searchResults: StateFlow<List<ExerciseEntity>> = pickerQuery
@@ -77,18 +83,24 @@ class PlanViewModel(
         )
     }
 
+    /** Сообщение и запрос на сохранение файла меняются независимо от плана. */
+    private val transientState = combine(message, exportRequest) { currentMessage, export ->
+        currentMessage to export
+    }
+
     val uiState: StateFlow<PlanUiState> = combine(
         pickerState,
-        message,
+        transientState,
         todayWorkoutState,
         openWorkoutId,
         unitSuggestions,
-    ) { state, currentMessage, todayWorkout, workoutToOpen, suggestions ->
+    ) { state, transient, todayWorkout, workoutToOpen, suggestions ->
         state.copy(
             todayWorkout = todayWorkout,
             openWorkoutId = workoutToOpen,
-            message = currentMessage,
+            message = transient.first,
             unitSuggestions = suggestions,
+            exportRequest = transient.second,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -174,6 +186,81 @@ class PlanViewModel(
 
     fun dismissDialog() {
         dialog.value = null
+        pendingImport.value = null
+    }
+
+    /** Готовит файл плана; UI сохраняет его через системный диалог. */
+    fun requestExport(appVersion: String) {
+        if (!mutationInFlight.compareAndSet(false, true)) return
+        viewModelScope.launch {
+            try {
+                val file = repository.buildPlanFile(appVersion)
+                exportRequest.value = PlanExportRequest(
+                    fileName = PlanFileCodec.fileName(today()),
+                    content = PlanFileCodec.encode(file),
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                message.value = PlanMessage.ExportFailed
+            } finally {
+                mutationInFlight.set(false)
+            }
+        }
+    }
+
+    /** Системный диалог сохранения закрыт: файл записан или пользователь отменил. */
+    fun onExportFinished(written: Boolean) {
+        exportRequest.value = null
+        if (written) message.value = PlanMessage.Exported
+    }
+
+    /** Разбирает выбранный файл и показывает предпросмотр импорта. */
+    fun importFromFile(content: String) {
+        if (!mutationInFlight.compareAndSet(false, true)) return
+        viewModelScope.launch {
+            try {
+                val file = try {
+                    PlanFileCodec.decode(content)
+                } catch (invalid: PlanFileException) {
+                    message.value = PlanMessage.ImportFailed(invalid.reason)
+                    return@launch
+                }
+                pendingImport.value = file
+                dialog.value = PlanDialog.ConfirmImport(repository.previewPlanImport(file))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                message.value = PlanMessage.ImportFailed(PlanFileException.Reason.CORRUPT)
+            } finally {
+                mutationInFlight.set(false)
+            }
+        }
+    }
+
+    /** Сообщает об ошибке чтения файла: разбор не начинался. */
+    fun rejectImport(reason: PlanFileException.Reason) {
+        message.value = PlanMessage.ImportFailed(reason)
+    }
+
+    /** Применяет разобранный файл: план заменяется целиком. */
+    fun confirmImport() {
+        val file = pendingImport.value ?: return
+        launchMutation {
+            when (val result = repository.importPlan(file)) {
+                is ImportPlanResult.Imported -> {
+                    pendingImport.value = null
+                    dialog.value = null
+                    message.value = PlanMessage.Imported(result.summary)
+                }
+
+                is ImportPlanResult.Rejected -> {
+                    pendingImport.value = null
+                    dialog.value = null
+                    message.value = PlanMessage.ImportFailed(result.reason)
+                }
+            }
+        }
     }
 
     fun saveNewExercise(name: String, description: String, units: List<String>, progress: String) {

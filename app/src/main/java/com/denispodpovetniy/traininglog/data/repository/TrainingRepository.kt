@@ -10,8 +10,14 @@ import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
 import com.denispodpovetniy.traininglog.data.relation.PlanExerciseWithExercise
 import com.denispodpovetniy.traininglog.data.relation.WorkoutWithExercises
 import com.denispodpovetniy.traininglog.util.ExerciseValidator
+import com.denispodpovetniy.traininglog.util.PlanFile
+import com.denispodpovetniy.traininglog.util.PlanFileCodec
+import com.denispodpovetniy.traininglog.util.PlanFileException
+import com.denispodpovetniy.traininglog.util.PlanFileExercise
+import com.denispodpovetniy.traininglog.util.PlanFileRow
 import com.denispodpovetniy.traininglog.util.ProgressCodec
 import com.denispodpovetniy.traininglog.util.isoWeekday
+import java.time.Instant
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -138,6 +144,169 @@ class TrainingRepository(private val db: AppDatabase) {
         }
 
         true
+    }
+
+    /**
+     * Снимок пресетов и недельного плана для экспорта. В БД ничего не меняется.
+     *
+     * Прогрессия переносится как есть, включая старые строки: на другом
+     * устройстве они останутся читаемыми в режиме `LEGACY`.
+     */
+    suspend fun buildPlanFile(
+        appVersion: String,
+        exportedAt: Instant = Instant.now(),
+    ): PlanFile {
+        val exercises = exerciseDao.getAll()
+        val planRows = planDao.getAll()
+
+        // Ключ — название без регистра. Если пресеты различаются только регистром,
+        // ключи получают суффикс, иначе файл не прошёл бы проверку на дубли.
+        val usedKeys = mutableMapOf<String, Int>()
+        val keyById = exercises.associate { exercise ->
+            val base = PlanFileCodec.keyOf(exercise.name)
+            val count = (usedKeys[base] ?: 0) + 1
+            usedKeys[base] = count
+            exercise.id to if (count == 1) base else "$base-$count"
+        }
+
+        return PlanFile(
+            formatVersion = PlanFileCodec.FORMAT_VERSION,
+            exportedAt = exportedAt.toString(),
+            appVersion = appVersion,
+            exercises = exercises.map { exercise ->
+                PlanFileExercise(
+                    key = keyById.getValue(exercise.id),
+                    name = exercise.name,
+                    description = exercise.description,
+                    units = ProgressCodec.decodeUnits(exercise.units),
+                    lastProgress = exercise.lastProgress,
+                )
+            },
+            plan = planRows.mapNotNull { row ->
+                val key = keyById[row.exerciseId] ?: return@mapNotNull null
+                PlanFileRow(
+                    weekday = row.weekday,
+                    position = row.position,
+                    exerciseKey = key,
+                    progress = row.progress,
+                )
+            },
+        )
+    }
+
+    /**
+     * Что изменится при импорте: сколько пресетов добавится, обновится и строк плана.
+     *
+     * Ничего не меняет; используется для предпросмотра до подтверждения.
+     */
+    suspend fun previewPlanImport(file: PlanFile): PlanImportSummary {
+        val existing = exerciseDao.getAll()
+        val existingExact = existing.associateBy { it.name.trim() }
+        val existingByKey = existing.groupBy { PlanFileCodec.keyOf(it.name) }
+        val added = file.exercises.count { matchPreset(existingExact, existingByKey, it) == null }
+        return PlanImportSummary(
+            addedExercises = added,
+            updatedExercises = file.exercises.size - added,
+            planRows = file.plan.size,
+        )
+    }
+
+    /**
+     * Применяет файл плана в одной транзакции: пресеты сопоставляются по названию
+     * (сначала точное, затем без учёта регистра; значения из файла побеждают),
+     * недельный план заменяется целиком. Тренировки не затрагиваются.
+     */
+    suspend fun importPlan(
+        file: PlanFile,
+        now: Long = System.currentTimeMillis(),
+    ): ImportPlanResult {
+        val fileKeys = file.exercises.mapTo(mutableSetOf()) { it.key }
+        val existing = exerciseDao.getAll()
+        val existingExact = existing.associateBy { it.name.trim() }
+        val existingByKey = existing.groupBy { PlanFileCodec.keyOf(it.name) }
+
+        // Два пресета файла могут совпасть с одним локальным; в одном дне
+        // они столкнутся с уникальностью (weekday, exerciseId).
+        val matchedIds = HashMap<String, Long>()
+        file.exercises.forEach { imported ->
+            matchPreset(existingExact, existingByKey, imported)?.let { matchedIds[imported.key] = it.id }
+        }
+        val samePresetTwiceInDay = file.plan.groupBy { it.weekday }.any { (_, rows) ->
+            val ids = rows.mapNotNull { matchedIds[it.exerciseKey] }
+            ids.distinct().size != ids.size
+        }
+
+        val invalidFile = fileKeys.size != file.exercises.size ||
+            file.plan.any { it.exerciseKey !in fileKeys } ||
+            file.plan.groupBy { it.weekday }.any { (weekday, rows) ->
+                // Позиции и упражнения в дне уникальны — так же, как в схеме БД.
+                weekday !in 1..7 ||
+                    rows.map { it.position }.toSet().size != rows.size ||
+                    rows.map { it.exerciseKey }.toSet().size != rows.size
+            } ||
+            samePresetTwiceInDay
+        if (invalidFile) return ImportPlanResult.Rejected(PlanFileException.Reason.DATA)
+
+        return db.withTransaction {
+            val idByKey = HashMap<String, Long>()
+            var added = 0
+            var updated = 0
+
+            file.exercises.forEach { imported ->
+                val units = ProgressCodec.encodeUnits(imported.units)
+                val match = matchPreset(existingExact, existingByKey, imported)
+                if (match == null) {
+                    idByKey[imported.key] = exerciseDao.insert(
+                        ExerciseEntity(
+                            name = imported.name,
+                            description = imported.description,
+                            lastProgress = imported.lastProgress,
+                            units = units,
+                            createdAt = now,
+                            updatedAt = now,
+                        ),
+                    )
+                    added++
+                } else {
+                    exerciseDao.updateFromPlanFile(
+                        id = match.id,
+                        name = imported.name,
+                        description = imported.description,
+                        progress = imported.lastProgress,
+                        units = units,
+                        now = now,
+                    )
+                    idByKey[imported.key] = match.id
+                    updated++
+                }
+            }
+
+            planDao.deleteAll()
+            file.plan
+                .groupBy { it.weekday }
+                .toSortedMap()
+                .forEach { (weekday, rows) ->
+                    rows.sortedBy { it.position }.forEachIndexed { index, row ->
+                        planDao.insert(
+                            PlanExerciseEntity(
+                                weekday = weekday,
+                                exerciseId = idByKey.getValue(row.exerciseKey),
+                                position = index,
+                                progress = row.progress,
+                                updatedAt = now,
+                            ),
+                        )
+                    }
+                }
+
+            ImportPlanResult.Imported(
+                PlanImportSummary(
+                    addedExercises = added,
+                    updatedExercises = updated,
+                    planRows = file.plan.size,
+                ),
+            )
+        }
     }
 
     /**
@@ -498,9 +667,20 @@ class TrainingRepository(private val db: AppDatabase) {
         }
     }
 
+    /**
+     * Ищет локальный пресет для пресета из файла: сначала точное название,
+     * затем без учёта регистра. Точное совпадение сохраняет раздельными пресеты,
+     * которые отличаются только регистром.
+     */
+    private fun matchPreset(
+        exact: Map<String, ExerciseEntity>,
+        byKey: Map<String, List<ExerciseEntity>>,
+        imported: PlanFileExercise,
+    ): ExerciseEntity? =
+        exact[imported.name.trim()] ?: byKey[PlanFileCodec.keyOf(imported.name)]?.firstOrNull()
+
     /** Отбрасывает пустые, слишком длинные и повторяющиеся названия единиц. */
-    private fun normalizeUnits(units: List<String>): List<String> {
-        val normalized = mutableListOf<String>()
+    private fun normalizeUnits(units: List<String>): List<String> {        val normalized = mutableListOf<String>()
         units.forEach { raw ->
             ProgressCodec.normalizeUnit(raw, normalized)?.let(normalized::add)
         }

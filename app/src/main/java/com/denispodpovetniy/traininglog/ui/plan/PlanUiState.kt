@@ -3,6 +3,8 @@ package com.denispodpovetniy.traininglog.ui.plan
 import com.denispodpovetniy.traininglog.data.entity.ExerciseEntity
 import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
 import com.denispodpovetniy.traininglog.data.relation.PlanExerciseWithExercise
+import com.denispodpovetniy.traininglog.data.repository.PlanImportSummary
+import com.denispodpovetniy.traininglog.util.PlanFileException
 import com.denispodpovetniy.traininglog.util.ProgressCodec
 
 /** Полное состояние экрана «Недельный план». */
@@ -18,8 +20,16 @@ data class PlanUiState(
     val pickerResults: List<ExerciseEntity> = emptyList(),
     /** Подсказки единиц: сохранённые пользователем и стартовый список. */
     val unitSuggestions: List<String> = emptyList(),
+    /** Готовый файл плана: UI просит сохранить его через SAF. */
+    val exportRequest: PlanExportRequest? = null,
     val dialog: PlanDialog? = null,
     val message: PlanMessage? = null,
+)
+
+/** Файл плана, готовый к записи через системный диалог сохранения. */
+data class PlanExportRequest(
+    val fileName: String,
+    val content: String,
 )
 
 /** Минимум данных о сегодняшней тренировке для CTA в плане. */
@@ -67,6 +77,8 @@ sealed interface PlanDialog {
 
     data class Units(val exerciseId: Long) : PlanDialog
 
+    data class ConfirmImport(val summary: PlanImportSummary) : PlanDialog
+
     data class ConfirmDelete(
         val planRowId: Long,
         val exerciseName: String,
@@ -74,11 +86,23 @@ sealed interface PlanDialog {
 }
 
 /** Разовое сообщение для snackbar. Тексты подставляются в Compose. */
-enum class PlanMessage {
-    DuplicateExercise,
-    ExerciseNotFound,
-    SaveFailed,
-    UnitRemoved,
+sealed interface PlanMessage {
+
+    data object DuplicateExercise : PlanMessage
+
+    data object ExerciseNotFound : PlanMessage
+
+    data object SaveFailed : PlanMessage
+
+    data object UnitRemoved : PlanMessage
+
+    data object Exported : PlanMessage
+
+    data object ExportFailed : PlanMessage
+
+    data class Imported(val summary: PlanImportSummary) : PlanMessage
+
+    data class ImportFailed(val reason: PlanFileException.Reason) : PlanMessage
 }
 
 /**

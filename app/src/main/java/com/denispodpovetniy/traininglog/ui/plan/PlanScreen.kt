@@ -1,6 +1,10 @@
 package com.denispodpovetniy.traininglog.ui.plan
 
+import android.content.Context
+import android.net.Uri
 import androidx.annotation.StringRes
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,11 +36,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.denispodpovetniy.traininglog.R
+import com.denispodpovetniy.traininglog.BuildConfig
 import com.denispodpovetniy.traininglog.TrainingLogApp
 import com.denispodpovetniy.traininglog.data.model.WorkoutStatus
 import com.denispodpovetniy.traininglog.ui.components.LongPressDescription
@@ -61,13 +69,48 @@ import com.denispodpovetniy.traininglog.ui.exercises.EditProgressDialog
 import com.denispodpovetniy.traininglog.ui.exercises.ExercisePickerSheet
 import com.denispodpovetniy.traininglog.ui.components.ProgressSummary
 import com.denispodpovetniy.traininglog.ui.components.UnitsEditorDialog
+import com.denispodpovetniy.traininglog.util.PlanFileCodec
+import com.denispodpovetniy.traininglog.util.PlanFileException
+import java.io.ByteArrayOutputStream
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val RussianLocale: Locale = Locale.forLanguageTag("ru")
 
+/** MIME-тип файла плана. */
+private const val PLAN_FILE_MIME = "application/json"
+
+/** Что принимает системный выбор файла: JSON и файлы, которые часть провайдеров отдаёт иначе. */
+private val PLAN_FILE_MIME_TYPES = arrayOf("application/json", "text/plain", "application/octet-stream")
+
+/**
+ * Читает выбранный файл целиком.
+ *
+ * @throws PlanFileException с причиной [PlanFileException.Reason.TOO_LARGE],
+ * если файл больше [PlanFileCodec.MAX_FILE_BYTES].
+ */
+private fun Context.readPlanFile(uri: Uri): String {
+    val bytes = contentResolver.openInputStream(uri)?.use { stream ->
+        val output = ByteArrayOutputStream()
+        val chunk = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val read = stream.read(chunk)
+            if (read < 0) break
+            output.write(chunk, 0, read)
+            if (output.size() > PlanFileCodec.MAX_FILE_BYTES) {
+                throw PlanFileException(PlanFileException.Reason.TOO_LARGE)
+            }
+        }
+        output.toByteArray()
+    } ?: throw PlanFileException(PlanFileException.Reason.CORRUPT)
+    return String(bytes, Charsets.UTF_8)
+}
+
 @Composable
 fun PlanScreen(
+    planActions: PlanActionsState,
     onOpenWorkout: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -75,6 +118,73 @@ fun PlanScreen(
     val repository = (context.applicationContext as TrainingLogApp).container.trainingRepository
     val viewModel: PlanViewModel = viewModel(factory = PlanViewModel.Factory(repository))
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    var exportLaunched by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    // Колбэк системного диалога живёт дольше композиции при повороте экрана:
+    // берём актуальный запрос из ViewModel, а не из замыкания.
+    val currentExport by rememberUpdatedState(state.exportRequest)
+
+    val createDocument = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(PLAN_FILE_MIME),
+    ) { uri ->
+        val request = currentExport
+        if (uri == null || request == null) {
+            viewModel.onExportFinished(written = false)
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch {
+            val written = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { stream ->
+                        stream.write(request.content.toByteArray(Charsets.UTF_8))
+                    } ?: error("Пустой поток записи")
+                }.isSuccess
+            }
+            viewModel.onExportFinished(written)
+        }
+    }
+
+    val openDocument = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { context.readPlanFile(uri) } }
+            result.fold(
+                onSuccess = { viewModel.importFromFile(it) },
+                onFailure = { error ->
+                    viewModel.rejectImport(
+                        (error as? PlanFileException)?.reason ?: PlanFileException.Reason.CORRUPT,
+                    )
+                },
+            )
+        }
+    }
+
+    LaunchedEffect(state.exportRequest) {
+        val request = state.exportRequest
+        if (request == null) {
+            exportLaunched = false
+            return@LaunchedEffect
+        }
+        // После поворота эффект запускается снова: диалог уже открыт, второй не нужен.
+        if (exportLaunched) return@LaunchedEffect
+        exportLaunched = true
+        createDocument.launch(request.fileName)
+    }
+
+    val onExport = rememberUpdatedState<() -> Unit> {
+        viewModel.requestExport(BuildConfig.VERSION_NAME)
+    }
+    val onImport = rememberUpdatedState<() -> Unit> {
+        openDocument.launch(PLAN_FILE_MIME_TYPES)
+    }
+    DisposableEffect(planActions) {
+        planActions.onExport = { onExport.value() }
+        planActions.onImport = { onImport.value() }
+        onDispose { planActions.clear() }
+    }
 
     PlanContent(
         state = state,
@@ -94,6 +204,7 @@ fun PlanScreen(
         onSaveNewExercise = viewModel::saveNewExercise,
         onSaveIdentity = viewModel::saveIdentity,
         onSaveProgress = viewModel::saveProgress,
+        onConfirmImport = viewModel::confirmImport,
         onDelete = viewModel::delete,
         onMove = viewModel::move,
         onStartOrOpenTodayWorkout = viewModel::startOrOpenTodayWorkout,
@@ -123,6 +234,7 @@ fun PlanContent(
     onSaveNewExercise: (name: String, description: String, units: List<String>, progress: String) -> Unit,
     onSaveIdentity: (row: PlanExerciseUi, name: String, description: String) -> Unit,
     onSaveProgress: (row: PlanExerciseUi, progress: String) -> Unit,
+    onConfirmImport: () -> Unit,
     onDelete: (PlanExerciseUi) -> Unit,
     onMove: (row: PlanExerciseUi, delta: Int) -> Unit,
     onStartOrOpenTodayWorkout: () -> Unit,
@@ -134,7 +246,24 @@ fun PlanContent(
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarScope = rememberCoroutineScope()
     val weekdays = stringArrayResource(R.array.weekdays)
-    val messageText = state.message?.let { stringResource(it.textRes) }
+    val messageText = state.message?.let { message ->
+        when (message) {
+            PlanMessage.DuplicateExercise -> stringResource(R.string.plan_message_duplicate)
+            PlanMessage.ExerciseNotFound -> stringResource(R.string.plan_message_not_found)
+            PlanMessage.SaveFailed -> stringResource(R.string.plan_message_save_failed)
+            PlanMessage.UnitRemoved -> stringResource(R.string.workout_message_unit_removed)
+            PlanMessage.Exported -> stringResource(R.string.plan_export_saved)
+            PlanMessage.ExportFailed -> stringResource(R.string.plan_export_failed)
+            is PlanMessage.Imported -> stringResource(
+                R.string.plan_import_done,
+                message.summary.addedExercises,
+                message.summary.updatedExercises,
+                message.summary.planRows,
+            )
+
+            is PlanMessage.ImportFailed -> stringResource(message.reason.textRes)
+        }
+    }
     val allExercises = remember(state.days) { state.days.flatMap { it.exercises } }
 
     LaunchedEffect(state.message) {
@@ -234,6 +363,12 @@ fun PlanContent(
                 )
             }
         }
+
+        is PlanDialog.ConfirmImport -> PlanImportDialog(
+            summary = dialog.summary,
+            onDismiss = onDismissDialog,
+            onConfirm = onConfirmImport,
+        )
 
         is PlanDialog.ConfirmDelete -> {
             val row = allExercises.firstOrNull { it.planRowId == dialog.planRowId }
@@ -556,10 +691,10 @@ private fun ConfirmDeleteDialog(
 }
 
 @get:StringRes
-private val PlanMessage.textRes: Int
+private val PlanFileException.Reason.textRes: Int
     get() = when (this) {
-        PlanMessage.DuplicateExercise -> R.string.plan_message_duplicate
-        PlanMessage.ExerciseNotFound -> R.string.plan_message_not_found
-        PlanMessage.SaveFailed -> R.string.plan_message_save_failed
-        PlanMessage.UnitRemoved -> R.string.workout_message_unit_removed
+        PlanFileException.Reason.CORRUPT -> R.string.plan_import_corrupt
+        PlanFileException.Reason.VERSION -> R.string.plan_import_version
+        PlanFileException.Reason.DATA -> R.string.plan_import_invalid
+        PlanFileException.Reason.TOO_LARGE -> R.string.plan_import_too_large
     }
